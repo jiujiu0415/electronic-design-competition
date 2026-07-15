@@ -9,6 +9,12 @@ skills-repos/
 Thumbs.db
 desktop.ini
 
+# Node (PDF渲染工具)
+node_modules/
+poppler/
+package.json
+package-lock.json
+
 # IDE
 .vscode/
 .idea/
