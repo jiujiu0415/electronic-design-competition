@@ -1,0 +1,14 @@
+# 技能源码仓库（体积大，仅本地保留）
+skills-repos/
+
+# 技能缓存
+.claude/cache/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
