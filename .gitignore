@@ -1,20 +1,19 @@
+# 工具目录（PDF渲染器、技能源码等，体积大，仅本地保留）
+tools/
+
 # 技能源码仓库（体积大，仅本地保留）
 skills-repos/
-
-# 技能缓存
-.claude/cache/
 
 # 系统文件
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Node (PDF渲染工具)
-node_modules/
-poppler/
-package.json
-package-lock.json
-
 # IDE
 .vscode/
 .idea/
+
+# Node
+node_modules/
+package.json
+package-lock.json
