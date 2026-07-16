@@ -1,0 +1,147 @@
+# main.c 修改参考（对照 e:/STM32/ad9833/Core/Src/main.c 使用）
+
+# 本文档标注了每个 USER CODE 区域应插入的代码。
+# 不要在 USER CODE BEGIN/END 之外写代码，否则 CubeMX 重新生成时会丢失。
+
+## 位置①：第22行 USR CODE BEGIN Includes
+============================================
+#include "ad9833.h"
+#include <string.h>
+#include <stdio.h>
+
+
+## 位置②：第47行 USER CODE BEGIN PV
+============================================
+uint8_t  rx_byte;
+char     rx_buf[64];
+uint8_t  rx_idx;
+uint8_t  rx_ready;
+uint16_t current_wave;
+
+
+## 位置③：第56行 USER CODE BEGIN PFP
+============================================
+void UART_Print(const char *str);
+void UART_Println(const char *str);
+void Cmd_Process(char *line);
+
+
+## 位置④：第96行 USER CODE BEGIN 2
+============================================
+AD9833_Init();
+current_wave = CTRL_SINE;
+HAL_UART_Receive_IT(&huart1, &rx_byte, 1);
+
+UART_Println("\r\n==================================");
+UART_Println(" AD9833 Signal Generator");
+UART_Println(" STM32F103C8T6 + AD9833");
+UART_Println("==================================");
+UART_Println(" Cmd: freq <Hz> | wave sin/tri/sqr");
+UART_Println("      sweep <start> <stop> <step> <ms>");
+UART_Println("      status | help");
+UART_Println("==================================\r\n");
+
+
+## 位置⑤：第101-107行 WHILE 循环
+============================================
+while (1)
+{
+    if (rx_ready)
+    {
+        Cmd_Process(rx_buf);
+        memset(rx_buf, 0, sizeof(rx_buf));
+        rx_idx = 0;
+        rx_ready = 0;
+        UART_Print("> ");
+    }
+}
+
+
+## 位置⑥：第252行 USER CODE BEGIN 4
+============================================
+void UART_Print(const char *str)
+{
+    HAL_UART_Transmit(&huart1, (uint8_t *)str, strlen(str), 100);
+}
+
+void UART_Println(const char *str)
+{
+    UART_Print(str);
+    UART_Print("\r\n");
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART1)
+    {
+        if (rx_byte == '\r' || rx_byte == '\n')
+        {
+            if (rx_idx > 0) { rx_buf[rx_idx] = '\0'; rx_ready = 1; }
+        }
+        else if (rx_byte == 8 || rx_byte == 127)
+        {
+            if (rx_idx > 0) rx_idx--;
+        }
+        else if (rx_idx < sizeof(rx_buf) - 1)
+        {
+            rx_buf[rx_idx++] = rx_byte;
+            HAL_UART_Transmit(&huart1, &rx_byte, 1, 10);
+        }
+        HAL_UART_Receive_IT(&huart1, &rx_byte, 1);
+    }
+}
+
+void Cmd_Process(char *line)
+{
+    char cmd[16] = {0};
+    float arg1 = 0, arg2 = 0, arg3 = 0, arg4 = 0;
+    char buf[64];
+    int n = sscanf(line, "%s %f %f %f %f", cmd, &arg1, &arg2, &arg3, &arg4);
+
+    if (strcmp(cmd, "freq") == 0 && n >= 2)
+    {
+        AD9833_SetFreq(arg1);
+        sprintf(buf, "OK: Frequency = %.2f Hz\r\n", arg1);
+        UART_Print(buf);
+    }
+    else if (strcmp(cmd, "wave") == 0 && n >= 2)
+    {
+        if (arg1 == 0)
+            { AD9833_SetWave(CTRL_SINE); current_wave = CTRL_SINE; UART_Println("OK: Sine"); }
+        else if (arg1 == 1)
+            { AD9833_SetWave(CTRL_TRIANGLE); current_wave = CTRL_TRIANGLE; UART_Println("OK: Triangle"); }
+        else if (arg1 == 2)
+            { AD9833_SetWave(CTRL_SQUARE); current_wave = CTRL_SQUARE; UART_Println("OK: Square"); }
+        else
+            { UART_Println("ERR: wave 0=sin, 1=tri, 2=sqr"); }
+    }
+    else if (strcmp(cmd, "sweep") == 0 && n >= 3)
+    {
+        float step = (n >= 4 && arg3 > 0) ? arg3 : 100.0f;
+        uint32_t del = (n >= 5 && arg4 > 0) ? (uint32_t)arg4 : 50;
+        sprintf(buf, "Sweep: %.0f -> %.0f Hz, step=%.0f Hz\r\n", arg1, arg2, step);
+        UART_Print(buf);
+        for (float f = arg1; f <= arg2; f += step)
+            { AD9833_SetFreq(f); HAL_Delay(del); }
+        UART_Println("Sweep done.");
+    }
+    else if (strcmp(cmd, "status") == 0)
+    {
+        const char *wn = (current_wave == CTRL_SINE) ? "Sine" :
+                         (current_wave == CTRL_TRIANGLE) ? "Triangle" : "Square";
+        UART_Println("--- AD9833 Status ---");
+        sprintf(buf, "  Wave: %s\r\n", wn); UART_Print(buf);
+        UART_Println("---------------------");
+    }
+    else if (strcmp(cmd, "help") == 0)
+    {
+        UART_Println("freq <Hz>              Set frequency");
+        UART_Println("wave <0|1|2>           0=Sin 1=Tri 2=Sqr");
+        UART_Println("sweep <start> <stop> [step] [ms]");
+        UART_Println("status | help");
+    }
+    else
+    {
+        UART_Println("ERR: Unknown. Try: freq/wave/sweep/status/help");
+    }
+}
