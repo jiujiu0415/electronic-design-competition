@@ -62,8 +62,8 @@ void AD9833_Init(void)
     /* Step 4: 写正弦波控制字 (CTRL_SINE 里 RESET=1)
      *         然后立即写释放复位 (CTRL_SINE 去掉 RESET)
      *         → 波形开始输出 */
-    AD9833_WriteRegister(CTRL_SINE);           /* 配波形, 仍在复位 */
-    AD9833_WriteRegister(BIT_B28);             /* B28=1, 其余全0 → RESET=0, 开始输出 */
+    AD9833_WriteRegister(CTRL_SINE);                      /* 配波形, 仍在复位 */
+    AD9833_WriteRegister(CTRL_SINE & ~BIT_RESET);          /* 只清除 RESET, 保留所有波形位 */
 }
 
 /* ============================================================
@@ -154,6 +154,6 @@ void AD9833_SetFreq(float freq_hz)
  * ============================================================ */
 void AD9833_SetWave(uint16_t wave_ctrl)
 {
-    AD9833_WriteRegister(wave_ctrl);     /* 写控制字 (含 RESET=1) */
-    AD9833_WriteRegister(BIT_B28);       /* 释放复位, 波形开始输出 */
+    AD9833_WriteRegister(wave_ctrl);                     /* 写控制字 (含 RESET=1) */
+    AD9833_WriteRegister(wave_ctrl & ~BIT_RESET);        /* 只清除 RESET, 保留波形位 */
 }
