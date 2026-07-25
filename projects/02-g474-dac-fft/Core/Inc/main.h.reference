@@ -1,0 +1,9 @@
+/**
+ * main.h 补充 — 在 CubeIDE 生成的 Core/Inc/main.h 中添加
+ *
+ * 找到 /* USER CODE BEGIN Private defines */ 区域:
+ */
+
+/* USER CODE BEGIN Private defines */
+extern volatile uint8_t adc_full_flag;
+/* USER CODE END Private defines */

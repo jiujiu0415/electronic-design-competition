@@ -1,0 +1,48 @@
+/**
+ * stm32g4xx_it.c 修改指南 — ADC DMA 中断处理
+ *
+ * 在 CubeIDE 生成的 Core/Src/stm32g4xx_it.c 中修改。
+ * 找到 DMA1_Channel1_IRQHandler 函数，在 USER CODE 区域加入。
+ */
+
+/* ============================================================
+ * ⑤ stm32g4xx_it.c — USER CODE BEGIN Includes
+ * ============================================================ */
+#include "adc.h"   /* 为 hdma_adc1 和 adc_full_flag */
+
+/* ============================================================
+ * ⑥ stm32g4xx_it.c — USER CODE BEGIN EV (外部变量声明)
+ * ============================================================ */
+// 如果 adc_full_flag 在 main.c 中定义为 PV 区，这里需要 extern:
+extern volatile uint8_t adc_full_flag;
+
+/* ============================================================
+ * ⑦ stm32g4xx_it.c — DMA1_Channel1_IRQHandler
+ *
+ * 在函数体的 /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */ 区域:
+ * ============================================================ */
+/* ADC DMA 传输完成 → 置标志位通知主循环 */
+if (__HAL_DMA_GET_FLAG(&hdma_adc1, DMA_FLAG_TC1) != RESET)
+{
+    __HAL_DMA_CLEAR_FLAG(&hdma_adc1, DMA_FLAG_TC1);
+    HAL_ADC_Stop_DMA(&hadc1);
+    adc_full_flag = 1;
+}
+
+/* ============================================================
+ * 补充: main.h 中声明外部变量
+ *
+ * 在 Core/Inc/main.h 的 USER CODE BEGIN Private defines:
+ * ============================================================ */
+extern volatile uint8_t adc_full_flag;
+
+/* ============================================================
+ * 注意: hdma_adc1 变量名
+ *
+ * CubeMX 生成的 DMA 句柄名可能在 Core/Inc/adc.h 里声明。
+ * 常见的变量名:
+ *   - hdma_adc1    (大部分版本)
+ *   - handle_DMA1_Channel1 (旧版)
+ *
+ * 如果编译报错 "hdma_adc1 undeclared", 去 adc.h 查准确的名称。
+ * ============================================================ */
