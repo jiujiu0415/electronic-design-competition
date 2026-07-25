@@ -127,15 +127,24 @@ Configuration → Analog → DAC1 → **DAC Out1 Settings** 标签：
 
 ### 4.4 DAC1 DMA 配置
 
-**DMA Settings** 标签 → 点 **Add** → 选 **DAC1_CHANNEL_1** → OK：
+**DMA Settings** 标签 → 点 **Add** → 选 **DAC1_CH1** → OK：
 
-| 参数 | DAC1_CH1 (PA4) | DAC1_CH2 (PA5) |
-|------|---------------|---------------|
-| Direction | **Memory to Peripheral** | **Memory to Peripheral** |
-| Mode | **Circular** | **Circular** |
-| Data Width | **Half Word** | **Half Word** |
+| 参数 | DAC1_CH1 (PA4) | 说明 |
+|------|---------------|------|
+| Direction | **Memory to Peripheral** | 数据：内存 → DAC |
+| Mode | **Circular** | 循环发送，波形不停 |
+| Priority | **Low** | |
+| Increment Address (Peripheral) | ☐ **不勾** | DAC 数据寄存器地址固定不变 |
+| Increment Address (Memory) | ☑ **勾上** | 波形数组地址递增 |
+| Data Width (Peripheral) | **Half Word** | 12位DAC用Half Word |
+| Data Width (Memory) | **Half Word** | |
 
-> ⚠️ 方向是 Memory→Peripheral（数据从内存流向外设DAC）。先配 CH1 的 DMA，再点 Add 加 CH2。
+配完 CH1 后，再点 **Add** → 选 **DAC1_CH2** → 同样配置。
+
+> ⚠️ 关键理解：
+> - Peripheral 地址不递增 = DMA 每次都往**同一个** DAC 数据寄存器写
+> - Memory 地址递增 = DMA 依次读 `dac_buffer[0]`, `dac_buffer[1]`, `dac_buffer[2]`...
+> - 这样波形表里的每个点依次输出，周而复始（Circular）
 
 ### 4.5 DAC1 NVIC
 
@@ -187,10 +196,18 @@ Configuration → Analog → ADC1：
 
 **DMA Settings** 标签 → 点 **Add** → 选 **ADC1** → OK：
 
-| 参数 | 值 |
-|------|-----|
-| Mode | **Circular** |
-| Data Width | **Half Word** |
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| Direction | **Peripheral to Memory** | 数据：ADC → 内存 |
+| Mode | **Circular** | 循环采集 |
+| Priority | **Low** | |
+| Increment Address (Peripheral) | ☐ **不勾** | ADC 数据寄存器地址固定 |
+| Increment Address (Memory) | ☑ **勾上** | 数组地址递增，adc_buffer[0], [1], [2]... |
+| Data Width (Peripheral) | **Half Word** | ADC 12位=Half Word |
+| Data Width (Memory) | **Half Word** | |
+
+> ⚠️ DAC DMA 是 Memory→Peripheral，ADC DMA 是 Peripheral→Memory，方向相反。
+> 但 Increment Address 逻辑一样：**Peripheral端不递增，Memory端递增**。
 
 ### 5.6 ADC1 NVIC
 
