@@ -20,7 +20,8 @@
 /* ============================================================
  * ② USER CODE BEGIN PD (宏定义)
  * ============================================================ */
-#define PI              3.14159265359f
+// 注意: PI 已在 arm_math.h 中定义, 不要重复 #define PI
+
 #define DAC_BUF_SIZE    2048
 #define ADC_BUF_SIZE    2048
 #define FFT_SIZE        1024

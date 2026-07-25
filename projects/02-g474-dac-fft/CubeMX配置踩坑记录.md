@@ -138,6 +138,20 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)  // 写在 main.c 里
 
 ---
 
+## 坑 #12：#define PI 与 arm_math.h 冲突
+
+**现象**：`#define PI 3.14159265359f` → warning: "PI" redefined
+
+**原因**：`arm_math.h` 内部已经定义了 `PI`，重复定义产生 warning。
+
+**修复**：删掉自己的 `#define PI`，直接使用。arm_math.h 提供的不需要再定义。
+
+**教训**：
+- **修复了对话框里的代码，必须同步更新保存的 reference 文件**。不能只在对话框说"改成xxx"，必须把文件也改了。
+- 引用第三方库时，先确认库里有没有现成的宏（arm_math.h 提供了 PI、TWO_PI 等）。
+
+---
+
 ## 通用教训
 
 ### 写 CubeMX 指南时的原则
