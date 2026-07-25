@@ -197,13 +197,16 @@ Configuration → Analog → ADC1：
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| Clock Prescaler | **PLLP divided by 4** | ADC 时钟 |
+| Clock Prescaler | **Synchronous clock mode divided by 4** | 同步模式，160/4=40MHz |
 | Resolution | **12 bits** | |
 | Data Alignment | **Right alignment** | 读出来就是 uint16 的 0~4095 |
 | Continuous Conversion Mode | **Disable** | TIM2 TRGO 每次触发才转换一次 |
 | DMA Continuous Requests | **Enable** | DMA 持续请求 |
 | End of Conversion Selection | **End of sequence of conversion** | 所有通道采完才置 EOC |
 | Number Of Conversion | **1** | 只采 1 个通道 |
+
+> ⚠️ 时钟模式选**同步**而不是异步：TIM2触发ADC时，同步模式避免跨时钟域抖动。
+> /1 和 /2 选项灰色不可选 = 正常，因为 160MHz 和 80MHz 超过 ADC 限速（~52MHz）。
 
 **必须确认默认是对的：**
 
