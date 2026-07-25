@@ -11,7 +11,8 @@
 1. 搜索 `STM32G474RE`
 2. 选中 **STM32G474RETx**（你的芯片）
 3. 点 Next，填工程名 `02-g474-dac-fft`
-4. 点 Finish
+4. Location 选到 `D:\CURSOR\Electronic Design\projects\`
+5. 点 Finish
 
 > 弹出来的 "Initialize all peripherals with their default Mode?" 选 **Yes**。
 
@@ -25,6 +26,8 @@
 |------|-----|------|
 | Debug | **Serial Wire** | 必须！否则 SWD 被禁用 |
 | Timebase Source | **SysTick** | HAL 时基 |
+
+> 其余 SYS 选项全部保持默认，不用改。
 
 ### 1.2 System Core → RCC
 
@@ -81,14 +84,18 @@ Pinout 视图 → 选 USART2 → Mode: **Asynchronous**
 
 Configuration → Connectivity → USART2：
 
-| 参数 | 值 |
-|------|-----|
-| Baud Rate | **115200** |
-| Word Length | 8 Bits |
-| Parity | None |
-| Stop Bits | 1 |
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| Baud Rate | **115200** | |
+| Word Length | 8 Bits | 默认 |
+| Parity | None | 默认 |
+| Stop Bits | 1 | 默认 |
+| Hardware Flow Control | Disable | 默认，不流控 |
+| Over Sampling | 16 Samples | 默认 |
 
 > ⚠️ **USART2 不要开启中断！** 我们只用 printf 发送，不做接收处理。
+>
+> 以上6项之外的参数全部保持 CubeMX 默认值，不用改。
 
 ---
 
@@ -96,34 +103,53 @@ Configuration → Connectivity → USART2：
 
 ### 4.1 Pinout 视图
 
+在 Pinout 视图里，展开 Analog → **DAC1**：
+
 | 操作 | 结果 |
 |------|------|
-| 选 DAC1 → OUT1 | PA4 = DAC1_OUT1（"信号源"波形） |
-| 选 DAC1 → OUT2 | PA5 = DAC1_OUT2（"同频可控"波形） |
+| 勾选 OUT1 | PA4 自动变模拟模式 = DAC1_OUT1 |
+| 勾选 OUT2 | PA5 自动变模拟模式 = DAC1_OUT2 |
 
-两个通道都勾选 **Connected to DAC Channel x**。
+> CubeMX 会自动把 PA4、PA5 设为 Analog mode，不需要手动配 GPIO。
 
 ### 4.2 DAC1 OUT1 配置（PA4 = 信号源）
 
 Configuration → Analog → DAC1 → **DAC Out1 Settings** 标签：
 
+**需要改的：**
+
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| Mode | **Connected to external pin only** | 只输出到引脚 |
-| Output Buffer | **Enable** | 降低输出阻抗 |
-| Trigger | **Timer 6 Trigger Out event** | TIM6 触发 DAC 更新 |
+| Mode | **Connected to external pin and to on chip-peripherals** | PA4引脚输出 + 内部可连 |
+| Output Buffer | **Enable** | 降低输出阻抗（代价：最低只能到~0.2V，不影响正弦波应用） |
+| Trigger | **Timer 6 Trigger Out event** | TIM6 每次溢出触发 DAC 输出新值 |
 
-> ⚠️ STM32G4 CubeMX里叫 "Trigger"（不是 External Trigger），也没有 Trigger polarity 选项，触发极性由硬件固定。
+**必须确认默认是对的：**
+
+| 参数 | 应有的值 | 说明 |
+|------|---------|------|
+| Wave Generation Mode | **Disabled** ⚠️ | **必须！** 如果选 Noise/Triangle，硬件波形发生器会覆盖 DMA 数据！ |
+| User Trimming | **Factory trimming** | 用出厂校准值 |
+| DAC High Frequency Mode | **Automatic** | 默认 |
+| DMA Double Data | **Disable** | 默认 |
+| Signed Format | **Disable** | 默认 |
+| Sample And Hold | **Sampleandhold Disable** | 默认 |
+
+> ⚠️ G4系列CubeMX里叫 "Trigger"（不是 External Trigger），也没有 Trigger polarity 选项，触发极性由硬件固定。
 
 ### 4.3 DAC1 OUT2 配置（PA5 = 同频可控输出）
 
 **DAC Out2 Settings** 标签：
 
+**需要改的：**
+
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| Mode | **Connected to external pin only** | 只输出到引脚 |
+| Mode | **Connected to external pin and to on chip-peripherals** | PA5引脚输出 |
 | Output Buffer | **Enable** | |
 | Trigger | **Timer 6 Trigger Out event** | 与OUT1同触发源，硬件保证两路同步 |
+
+**必须确认默认是对的：** （同OUT1，Wave Generation Mode = Disabled 等）
 
 ### 4.4 DAC1 DMA 配置
 
@@ -131,20 +157,17 @@ Configuration → Analog → DAC1 → **DAC Out1 Settings** 标签：
 
 | 参数 | DAC1_CH1 (PA4) | 说明 |
 |------|---------------|------|
-| Direction | **Memory to Peripheral** | 数据：内存 → DAC |
-| Mode | **Circular** | 循环发送，波形不停 |
+| Direction | **Memory to Peripheral** | 数据流向：内存 → DAC |
+| Mode | **Circular** | 波形表循环输出，不停 |
 | Priority | **Low** | |
-| Increment Address (Peripheral) | ☐ **不勾** | DAC 数据寄存器地址固定不变 |
-| Increment Address (Memory) | ☑ **勾上** | 波形数组地址递增 |
-| Data Width (Peripheral) | **Half Word** | 12位DAC用Half Word |
+| Increment Address (Peripheral) | ☐ **不勾** | DAC 数据寄存器是固定地址 |
+| Increment Address (Memory) | ☑ **勾上** | 依次读 `dac_buf[0],[1],[2]...` |
+| Data Width (Peripheral) | **Half Word** | |
 | Data Width (Memory) | **Half Word** | |
 
 配完 CH1 后，再点 **Add** → 选 **DAC1_CH2** → 同样配置。
 
-> ⚠️ 关键理解：
-> - Peripheral 地址不递增 = DMA 每次都往**同一个** DAC 数据寄存器写
-> - Memory 地址递增 = DMA 依次读 `dac_buffer[0]`, `dac_buffer[1]`, `dac_buffer[2]`...
-> - 这样波形表里的每个点依次输出，周而复始（Circular）
+> 📌 其余未提到的 DMA 选项（FIFO、Burst等）全部保持默认。
 
 ### 4.5 DAC1 NVIC
 
@@ -162,35 +185,47 @@ Configuration → Analog → DAC1 → **DAC Out1 Settings** 标签：
 
 ### 5.1 Pinout 视图
 
-右键 PA0 → **ADC1_IN1**（接 DAC1_OUT1，采集信号源波形）
+右键 PA0 → **ADC1_IN1**（接 DAC1_OUT1，杜邦线短接 PA4 ↔ PA0）
 
-选 Single-ended 模式。
+> 选 Single-ended 模式。ADC1_IN0 (PA0) 和 ADC1_IN1 (PA1) 物理上不同。
 
 ### 5.2 ADC1 参数
 
 Configuration → Analog → ADC1：
 
+**需要改的：**
+
 | 参数 | 值 | 说明 |
 |------|-----|------|
 | Clock Prescaler | **PLLP divided by 4** | ADC 时钟 |
 | Resolution | **12 bits** | |
-| Data Alignment | **Right alignment** | |
-| Continuous Conversion Mode | **Disable** | TIM 触发，不连续 |
-| DMA Continuous Requests | **Enable** | |
-| Number Of Conversion | **1** | 单通道 |
+| Data Alignment | **Right alignment** | 读出来就是 uint16 的 0~4095 |
+| Continuous Conversion Mode | **Disable** | TIM2 TRGO 每次触发才转换一次 |
+| DMA Continuous Requests | **Enable** | DMA 持续请求 |
+| End of Conversion Selection | **End of sequence of conversion** | 所有通道采完才置 EOC |
+| Number Of Conversion | **1** | 只采 1 个通道 |
 
-### 5.3 Regular Conversion → Rank
+**必须确认默认是对的：**
 
-| Rank | Channel | Sampling Time |
-|------|---------|---------------|
-| 1 | Channel 1 (IN1) | **2.5 cycles** |
+| 参数 | 应有的值 | 说明 |
+|------|---------|------|
+| Scan Conversion Mode | 灰着/自动 | G4 系列 ≥2 通道才自动启用，1 通道不用管 |
+| Discontinuous Conversion Mode | **Disable** | |
+| Overrun Behaviour | **Overrun data overwritten** | 新数据覆盖旧数据 |
+| Low Power Auto Wait | **Disable** | |
 
-### 5.4 External Trigger
+### 5.3 External Trigger
 
 | 选项 | 值 |
 |------|-----|
 | Trigger Source | **Timer 2 Trigger Out event** |
 | Trigger Edge | **Rising edge** |
+
+### 5.4 Regular Conversion → Rank
+
+| Rank | Channel | Sampling Time |
+|------|---------|---------------|
+| 1 | Channel 1 (IN1) | **2.5 cycles** |
 
 ### 5.5 ADC1 DMA 配置
 
@@ -198,16 +233,15 @@ Configuration → Analog → ADC1：
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| Direction | **Peripheral to Memory** | 数据：ADC → 内存 |
+| Direction | **Peripheral to Memory** | ADC → 内存 |
 | Mode | **Circular** | 循环采集 |
 | Priority | **Low** | |
-| Increment Address (Peripheral) | ☐ **不勾** | ADC 数据寄存器地址固定 |
-| Increment Address (Memory) | ☑ **勾上** | 数组地址递增，adc_buffer[0], [1], [2]... |
-| Data Width (Peripheral) | **Half Word** | ADC 12位=Half Word |
+| Increment Address (Peripheral) | ☐ **不勾** | ADC 数据寄存器是固定地址 |
+| Increment Address (Memory) | ☑ **勾上** | adc_buf[0],[1],[2]... |
+| Data Width (Peripheral) | **Half Word** | |
 | Data Width (Memory) | **Half Word** | |
 
-> ⚠️ DAC DMA 是 Memory→Peripheral，ADC DMA 是 Peripheral→Memory，方向相反。
-> 但 Increment Address 逻辑一样：**Peripheral端不递增，Memory端递增**。
+> 📌 其余 DMA 选项保持默认。ADC DMA 方向是 Peripheral→Memory，和 DAC DMA 相反。
 
 ### 5.6 ADC1 NVIC
 
@@ -223,19 +257,31 @@ Configuration → Analog → ADC1：
 
 Configuration → Timers → TIM6：
 
+**需要改的：**
+
 | 参数 | 值 | 说明 |
 |------|-----|------|
 | Prescaler | **160-1** = 159 | TIM6_CLK = 160MHz / 160 = 1MHz |
 | Counter Period | **10-1** = 9 | 1MHz / 10 = **100kHz DAC更新率** |
 | Auto-reload preload | **Enable** | |
-| Trigger Output (TRGO) | **Update Event** | |
+| Trigger Output (TRGO) | **Update Event** | 每次溢出输出 TRGO 脉冲 |
 
-> **DAC更新率 = 100kHz**，意味着一个正弦波周期有多少个点取决于频率。
-> 例：输出10kHz正弦波 → 100/10 = 10个点/周期
+**确认默认：**
+
+| 参数 | 应有的值 | 说明 |
+|------|---------|------|
+| Counter Mode | **Up** | 默认 |
+| One Pulse Mode | **Disable** | 默认 |
+
+> **DAC更新率 = 100kHz**，即每秒更新100k个点。
+> 例：输出 10kHz 正弦 → 100kHz / 10kHz = 10个点/周期
+> 例：输出 1kHz 正弦 → 100kHz / 1kHz = 100个点/周期
 
 ### 6.2 TIM2 — ADC 触发定时器
 
 Configuration → Timers → TIM2：
+
+**需要改的：**
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
@@ -244,9 +290,22 @@ Configuration → Timers → TIM2：
 | Auto-reload preload | **Enable** | |
 | Trigger Output (TRGO) | **Update Event** | |
 
+**确认默认：** Counter Mode = Up，One Pulse Mode = Disable。
+
 > **采样率 250kHz**：对于 10kHz 输入信号，每周期 25 个采样点。
 >
-> TIM2 不开中断！只输出 TRGO 触发 ADC。
+> ⚠️ TIM2 **不开中断**！只输出 TRGO 触发 ADC。
+
+### 6.3 采样率速查
+
+以后改采样率只改 TIM2 的 ARR：
+
+| 采样率 | TIM2 ARR | 能分析的信号频率（奈奎斯特÷2） |
+|--------|----------|------------------------------|
+| 500kHz | 19 | 0 ~ 250kHz |
+| 250kHz | 39 | 0 ~ 125kHz ← 当前 |
+| 100kHz | 99 | 0 ~ 50kHz |
+| 50kHz | 199 | 0 ~ 25kHz |
 
 ---
 
@@ -256,7 +315,9 @@ System Core → NVIC：
 
 | 中断 | 使能 | 优先级 | 用途 |
 |------|------|--------|------|
-| DMA1 channel 1 | ☑ | 3 | ADC DMA 全满中断 → 通知 CPU 做 FFT |
+| DMA1 channel 1 | ☑ | 3 | ADC DMA 全满 → 通知 CPU 做 FFT |
+
+> 所有未列出的中断保持默认（通常=不使能）。
 
 ---
 
@@ -264,11 +325,13 @@ System Core → NVIC：
 
 | 引脚 | 功能 | 用途 |
 |------|------|------|
-| PA4 | DAC1_OUT1 | 信号源正弦波 → 示波器CH1 + 跳线到PA0 |
+| PA4 | DAC1_OUT1 | 信号源正弦波 → 示波器CH1 + 杜邦线→PA0 |
 | PA5 | DAC1_OUT2 | 同频可控输出 → 示波器CH2 |
-| PA0 | ADC1_IN1 | 采集PA4信号（杜邦线短接PA4-PA0） |
-| PA2 | USART2_TX | 串口printf调试 |
-| PA3 | USART2_RX | 串口接收 |
+| PA0 | ADC1_IN1 | 采集PA4信号（杜邦线短接 PA4↔PA0） |
+| PA2 | USART2_TX | 串口 printf 调试 |
+| PA3 | USART2_RX | 串口接收（暂不用） |
+
+> 物理接线：**一根杜邦线把 PA4 和 PA0 短接**，DAC 输出就能被 ADC 采到。
 
 ---
 
@@ -296,4 +359,4 @@ System Core → NVIC：
 生成代码后：
 - 先编译验证 → 0 Error
 - 点灯测试烧录是否正常
-- 然后进入第5步：写DAC波形生成代码
+- 然后进入第5步：写 DAC 波形生成代码
