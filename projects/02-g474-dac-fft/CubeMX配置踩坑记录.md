@@ -83,6 +83,31 @@
 
 ---
 
+## 坑 #8：NVIC 灰色复选框的两种含义
+
+| 状态 | 含义 | 举例 |
+|------|------|------|
+| ☑ 勾上 + 灰色 | **强制开启**，CubeMX 不让你关 | ADC DMA Channel 1 interrupt |
+| ☐ 不勾 + 灰色 | **不可用**，当前模式不需要 | DAC1 global interrupt（DMA模式下） |
+
+**教训**：不能看到灰色就说"不需要"。先看勾没勾上，再判断。☑灰色 = 已经生效，☐灰色 = 不需要。
+
+---
+
+## 坑 #9：TIM2/TIM6 顶部 Mode 区容易忽略
+
+TIM 配置页分成两部分：
+- **上方 Mode 区**：Clock Source（选 Internal Clock）+ Channel 模式
+- **下方 Configuration 区**：PSC、ARR、TRGO 等参数
+
+指南只写了下方参数，漏了上方 Mode 区：
+- Clock Source 必须是 **Internal Clock**（默认就是，但需确认）
+- Channel 1~4 全部 **Disable**（不需要 PWM/输入捕获，只要 TRGO 触发）
+
+**教训**：CubeMX TIM 页面分上下两个区域，指南要分别说明。
+
+---
+
 ## 通用教训
 
 ### 写 CubeMX 指南时的原则

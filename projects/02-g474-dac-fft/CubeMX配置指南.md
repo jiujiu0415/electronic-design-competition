@@ -260,7 +260,15 @@ Configuration → Analog → ADC1：
 
 Configuration → Timers → TIM6：
 
-**需要改的：**
+**上方 Mode 区：**
+
+| 选项 | 值 | 说明 |
+|------|-----|------|
+| Clock Source | **Internal Clock** | 用内部时钟 |
+
+> TIM6 是基本定时器，没有 Channel 选项，比 TIM2 简单。
+
+**下方 Configuration 区（参数）：**
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
@@ -283,6 +291,15 @@ Configuration → Timers → TIM6：
 ### 6.2 TIM2 — ADC 触发定时器
 
 Configuration → Timers → TIM2：
+
+**上方 Mode 区（通道模式）：**
+
+| 选项 | 值 | 说明 |
+|------|-----|------|
+| Clock Source | **Internal Clock** | 用内部时钟 |
+| Channel1 ~ Channel4 | 全部 **Disable** | 不需要 PWM/输入捕获，只要 TRGO |
+
+**下方 Configuration 区（参数）：**
 
 **需要改的：**
 
