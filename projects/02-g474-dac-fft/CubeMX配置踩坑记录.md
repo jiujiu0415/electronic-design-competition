@@ -124,3 +124,38 @@ TIM 配置页分成两部分：
 - STM32G4 ≠ STM32F1，CubeMX 界面选项名不同
 - 同一芯片系列不同版本 CubeMX 界面也可能微调
 - 截图是最好的文档——Clock、Pinout、每个外设的参数页
+
+---
+
+## DSP 库配置方法（来源：STM32数字信号处理_v1.1.pdf 第9-10页）
+
+> PDF 原教程基于 Keil MDK，以下是适配到 STM32CubeIDE 的方法。
+> 用户已验证通过，编译无报错。
+
+### CubeIDE 启用 CMSIS-DSP 步骤
+
+**方法：CubeIDE 软件内配置**
+
+1. 右键工程 → **Properties** → **C/C++ Build → Settings**
+2. **MCU GCC Linker → Libraries**：
+   - Libraries(-l) 添加：`arm_cortexM4lf_math`
+   - Library search path(-L) 添加：指向 `Drivers/CMSIS/DSP/Lib/GCC/` 目录
+3. **MCU GCC Compiler → Include paths**：添加 `../Drivers/CMSIS/DSP/Include`
+4. **MCU GCC Compiler → Preprocessor → Defined symbols**：添加 `ARM_MATH_CM4`
+
+### 关键来自 PDF 的提示
+
+| 提示 | 来源 | 说明 |
+|------|------|------|
+| 优化等级设为 **O1** | PDF第10页 | O1平衡速度和安全。太高(O2/O3)可能导致DSP库函数被优化掉→HardFault；太低(O0)编译慢、内存不足 |
+| 宏 `ARM_MATH_CM4` 必须定义 | PDF第10页 | DSP库通过这个宏选择Cortex-M4的代码路径 |
+| 头文件 `arm_math.h` | PDF第12页 | `#include "arm_math.h"` 放在 USER CODE Includes 区 |
+
+### 验证方法
+
+```c
+/* USER CODE BEGIN Includes */
+#include "arm_math.h"
+/* USER CODE END Includes */
+```
+Ctrl+B 编译 → 不报错 = DSP 库配置成功。
