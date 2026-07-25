@@ -108,6 +108,36 @@ TIM 配置页分成两部分：
 
 ---
 
+## 坑 #10：hdma_adc1 变量不存在 → 不要手改 it.c，用 HAL 回调
+
+**现象**：在 stm32g4xx_it.c 中引用 `hdma_adc1`，编译报错 `'hdma_adc1' undeclared`。
+
+adc.h 中 **只有** `extern ADC_HandleTypeDef hadc1;`，没有 `hdma_adc1`。CubeMX 不给 DMA 句柄单独暴露 extern。
+
+**正确做法**：不在 it.c 里手写 DMA 中断代码，改用 HAL 的 ADC 转换完成回调：
+```c
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)  // 写在 main.c 里
+```
+
+**教训**：CubeMX 生成的 DMA 句柄不一定有 extern 声明。优先用 HAL 回调而不是直接操作 DMA 寄存器。回调在 main.c 里写，不需要知道 DMA 句柄的名字。
+
+---
+
+## 坑 #11：以为用了回调就不需要 extern — 错！
+
+**错误判断**：既然回调 `HAL_ADC_ConvCpltCallback` 写在 main.c 里，而 `adc_full_flag` 也在 main.c 的 PV 区，应该不需要 extern。
+
+**但用户编译验证**：不添加 `extern volatile uint8_t adc_full_flag;` 到 main.h → 编译报错；添加后 → 通过。
+
+**原因**：HAL 的 DMA 中断回调链路涉及多个 .c 文件（stm32g4xx_it.c → HAL DMA → HAL ADC → 回调），`adc_full_flag` 在链接阶段被 it.c 侧的代码路径间接引用。编译器的优化和链接行为不是纯按文件隔离的。
+
+**教训**：
+- **跨文件的全局变量永远要在头文件写 extern**，不要凭"看起来不需要"就删掉
+- 用户说"编译报错需要这个"比我的推理更可信——编译器不会骗人
+- 先让代码编译通过，再优化设计，不要反过来
+
+---
+
 ## 通用教训
 
 ### 写 CubeMX 指南时的原则

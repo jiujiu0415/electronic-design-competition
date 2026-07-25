@@ -68,6 +68,21 @@ int _write(int fd, char *ptr, int len)
 #endif
 
 /**
+ * HAL_ADC_ConvCpltCallback — ADC DMA 传输完成回调
+ *
+ * HAL 库内部自动调用, 不需要手动改 it.c。
+ * DMA 完成后置标志位, 主循环检测后做 FFT。
+ */
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    if (hadc->Instance == ADC1)
+    {
+        HAL_ADC_Stop_DMA(&hadc1);
+        adc_full_flag = 1;
+    }
+}
+
+/**
  * ADMIN_Init() — 系统初始化
  *
  * 流程:
