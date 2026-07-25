@@ -1,0 +1,100 @@
+/**
+ * 第5步: DAC波形输出（最小版本）
+ *
+ * 本文件只包含 DAC 双通道正弦波输出的代码。
+ * ADC、FFT、中断等代码在第6-7步添加。
+ *
+ * 功能:
+ *   PA4 (DAC1_OUT1): 1kHz 正弦波 → 示波器CH1
+ *   PA5 (DAC1_OUT2): 1kHz 正弦波 → 示波器CH2
+ *   两路由 TIM6 (100kHz) + DMA 循环驱动
+ *
+ * 硬件: STM32G474RET6, HSI→PLL→160MHz
+ */
+
+/* ============================================================
+ * ① USER CODE BEGIN Includes
+ * ============================================================ */
+#include "arm_math.h"
+#include "stdio.h"
+
+/* ============================================================
+ * ② USER CODE BEGIN PD
+ * ============================================================ */
+#define PI              3.14159265359f
+#define DAC_BUF_SIZE    2048
+
+/* TIM6: 160MHz / (159+1) / (9+1) = 100kHz */
+#define DAC_UPDATE_RATE 100000.0f
+
+/* 信号源频率 (必须能整除 DAC_UPDATE_RATE) */
+#define SIGNAL_FREQ     1000.0f
+
+/* 每周期点数 = 100k / 1k = 100 */
+#define DAC_RATIO       ((uint16_t)(DAC_UPDATE_RATE / SIGNAL_FREQ))
+
+/* ============================================================
+ * ③ USER CODE BEGIN PV
+ * ============================================================ */
+uint16_t dac_buf_ch1[DAC_BUF_SIZE];  /* PA4 信号源 */
+uint16_t dac_buf_ch2[DAC_BUF_SIZE];  /* PA5 同频输出 */
+char tx_buf[128];
+
+/* ============================================================
+ * ④ USER CODE BEGIN 0
+ * ============================================================ */
+
+/* printf 重定向到 USART2 */
+#ifdef __GNUC__
+int _write(int fd, char *ptr, int len)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, 100);
+    return len;
+}
+#endif
+
+/**
+ * ADMIN_Init() — 第5步: 仅DAC波形输出
+ */
+void ADMIN_Init(void)
+{
+    float amp = 0.8f;  /* 幅度系数: 0.8 = Vpp约2.6V */
+
+    /* 生成正弦波到两个DAC通道 */
+    for (uint16_t i = 0; i < DAC_RATIO; i++)
+    {
+        float phase = 2.0f * PI * i / (float)DAC_RATIO;
+        float value = 2048.0f + 2047.0f * amp * arm_cos_f32(phase);
+        dac_buf_ch1[i] = (uint16_t)value;
+        dac_buf_ch2[i] = (uint16_t)value;
+    }
+
+    /* 启动 TIM6 (DAC触发源) */
+    HAL_TIM_Base_Start(&htim6);
+
+    /* 启动 DAC DMA 双通道循环输出 */
+    HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1,
+                      (uint32_t *)dac_buf_ch1, DAC_RATIO, DAC_ALIGN_12B_R);
+    HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2,
+                      (uint32_t *)dac_buf_ch2, DAC_RATIO, DAC_ALIGN_12B_R);
+
+    printf("DAC start: PA4=%.0fHz  PA5=%.0fHz\r\n", SIGNAL_FREQ, SIGNAL_FREQ);
+}
+
+/* ============================================================
+ * ⑤ USER CODE BEGIN 2
+ * ============================================================ */
+// 在 main() 函数的 USER CODE BEGIN 2 中只加这一行:
+ADMIN_Init();
+
+/* ============================================================
+ * ⑥ USER CODE BEGIN 3 — 第5步先空着
+ * ============================================================ */
+// 下一步(第6步)在这里加 ADC 采集
+
+/* ============================================================
+ * 其他文件 — 第5步不需要修改
+ * ============================================================
+ * main.h     → 不修改
+ * it.c       → 不修改
+ */
