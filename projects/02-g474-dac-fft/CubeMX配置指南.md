@@ -10,7 +10,7 @@
 
 1. 搜索 `STM32G474RE`
 2. 选中 **STM32G474RETx**（你的芯片）
-3. 点 Next，填工程名 `stm32g4-dac-adc-fft`
+3. 点 Next，填工程名 `02-g474-dac-fft`
 4. 点 Finish
 
 > 弹出来的 "Initialize all peripherals with their default Mode?" 选 **Yes**。
@@ -103,27 +103,27 @@ Configuration → Connectivity → USART2：
 
 两个通道都勾选 **Connected to DAC Channel x**。
 
-### 4.2 DAC1 OUT1 配置
+### 4.2 DAC1 OUT1 配置（PA4 = 信号源）
 
 Configuration → Analog → DAC1 → **DAC Out1 Settings** 标签：
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| External Trigger | **Timer 6 TRGO** | TIM6 触发 DAC 更新 |
-| Trigger polarity | **上升沿触发** | |
-| Mode | **Connected to external pin only** | |
-| Output Buffer | **Enable** | |
+| Mode | **Connected to external pin only** | 只输出到引脚 |
+| Output Buffer | **Enable** | 降低输出阻抗 |
+| Trigger | **Timer 6 Trigger Out event** | TIM6 触发 DAC 更新 |
 
-### 4.3 DAC1 OUT2 配置
+> ⚠️ STM32G4 CubeMX里叫 "Trigger"（不是 External Trigger），也没有 Trigger polarity 选项，触发极性由硬件固定。
+
+### 4.3 DAC1 OUT2 配置（PA5 = 同频可控输出）
 
 **DAC Out2 Settings** 标签：
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| External Trigger | **Timer 6 TRGO** | 与 OUT1 同触发源，保证同步 |
-| Trigger polarity | **上升沿触发** | |
-| Mode | **Connected to external pin only** | |
+| Mode | **Connected to external pin only** | 只输出到引脚 |
 | Output Buffer | **Enable** | |
+| Trigger | **Timer 6 Trigger Out event** | 与OUT1同触发源，硬件保证两路同步 |
 
 ### 4.4 DAC1 DMA 配置
 
@@ -131,11 +131,11 @@ Configuration → Analog → DAC1 → **DAC Out1 Settings** 标签：
 
 | 参数 | DAC1_CH1 (PA4) | DAC1_CH2 (PA5) |
 |------|---------------|---------------|
-| Direction | Peripheral to Memory | Peripheral to Memory |
+| Direction | **Memory to Peripheral** | **Memory to Peripheral** |
 | Mode | **Circular** | **Circular** |
 | Data Width | **Half Word** | **Half Word** |
 
-> ⚠️ 注意：先配 CH1 的 DMA，再点 Add 加 CH2。两个通道各自独立的 DMA 流。
+> ⚠️ 方向是 Memory→Peripheral（数据从内存流向外设DAC）。先配 CH1 的 DMA，再点 Add 加 CH2。
 
 ### 4.5 DAC1 NVIC
 
@@ -261,7 +261,7 @@ System Core → NVIC：
 
 | 选项 | 值 |
 |------|-----|
-| Project Name | `stm32g4-dac-adc-fft` |
+| Project Name | `02-g474-dac-fft` |
 | Toolchain / IDE | **STM32CubeIDE** |
 
 ### Project Manager → Code Generator
