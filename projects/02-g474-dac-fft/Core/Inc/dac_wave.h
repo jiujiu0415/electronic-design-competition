@@ -32,8 +32,19 @@ typedef enum {
     WAVE_SINE = 0,
     WAVE_TRIANGLE,
     WAVE_SQUARE,
-    WAVE_SAWTOOTH
+    WAVE_SAWTOOTH,
+    WAVE_COMPOSITE          /* 多分量叠加 */
 } WaveType;
+
+/* 最大叠加分量数 */
+#define MAX_COMPONENTS 4
+
+/* 叠加波形的一个分量 */
+typedef struct {
+    WaveType type;              /* 该分量的波形 */
+    float    amplitude;         /* 该分量的幅度 (0~1) */
+    float    freq_multiplier;   /* 频率倍数 (1=基频, 2=2倍频, 3=3倍频...) */
+} WaveComponent;
 
 /* ============================================================
  * API 函数
@@ -87,6 +98,24 @@ void  DAC_Wave_SetType(uint32_t channel, WaveType wave);
  * 需要调用此函数才会生效。
  */
 void  DAC_Wave_Update(uint32_t channel);
+
+/**
+ * DAC_Wave_SetComposite — 配置叠加波形 (多个分量相加)
+ *
+ * @param channel    DAC_CHANNEL_1 或 DAC_CHANNEL_2
+ * @param freq_hz    基频 (Hz)
+ * @param components 分量数组，每个分量指定 {波形, 幅度, 频率倍数}
+ * @param count      分量个数 (1 ~ MAX_COMPONENTS)
+ *
+ * 示例: 三角波基频 + 3倍频正弦波叠加
+ *   WaveComponent comps[] = {
+ *       {WAVE_TRIANGLE, 0.6f, 1.0f},   // 基频三角波 60%
+ *       {WAVE_SINE,     0.2f, 3.0f},   // 3倍频正弦波 20%
+ *   };
+ *   DAC_Wave_SetComposite(DAC_CHANNEL_1, 1000.0f, comps, 2);
+ */
+void  DAC_Wave_SetComposite(uint32_t channel, float freq_hz,
+                            WaveComponent *components, uint8_t count);
 
 /**
  * DAC_Wave_Stop — 停止某路 DAC

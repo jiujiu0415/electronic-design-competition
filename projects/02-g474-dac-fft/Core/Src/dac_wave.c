@@ -3,11 +3,11 @@
  *
  * 原理:
  *   TIM6 以 100kHz 触发 DAC DMA, DMA 循环输出波形表。
- *   波形表包含一个完整周期的数据, 点数 = DAC更新率 / 输出频率。
- *   改频率 = 改点数 + 重新生成波形表。
+ *   支持: 正弦/三角/方波/锯齿波 以及 多分量叠加。
  */
 
 #include "dac_wave.h"
+#include <math.h>      /* fmodf */
 
 /* ============================================================
  * 外部引用 (CubeMX 生成)
@@ -28,86 +28,101 @@ static float     amp1,    amp2;       /* 当前幅度系数 */
 static float     phase1,  phase2;     /* 当前相位偏移(度) */
 static WaveType  wave1,   wave2;      /* 当前波形类型 */
 
+/* 叠加分量存储 */
+static WaveComponent comps1[MAX_COMPONENTS], comps2[MAX_COMPONENTS];
+static uint8_t       comp_count1, comp_count2;
+
 static uint8_t   inited = 0;          /* 是否已初始化 */
 
 /* ============================================================
- * 内部函数: 生成波形数据到缓冲区
+ * wave_sample — 返回波形在相位 t (0~1) 处的值 [-1, +1]
  * ============================================================ */
+static float wave_sample(WaveType type, float t, float phase_rad)
+{
+    float phase = 2.0f * PI * t + phase_rad;
 
-/**
+    switch (type)
+    {
+    case WAVE_SINE:
+        return arm_cos_f32(phase);
+
+    case WAVE_TRIANGLE:
+        if (t < 0.25f)       return 4.0f * t;
+        else if (t < 0.75f)  return 2.0f - 4.0f * t;
+        else                 return 4.0f * t - 4.0f;
+
+    case WAVE_SQUARE:
+        return (t < 0.5f) ? 1.0f : -1.0f;
+
+    case WAVE_SAWTOOTH:
+        return 2.0f * t - 1.0f;
+
+    default:
+        return arm_cos_f32(phase);
+    }
+}
+
+/* ============================================================
  * gen_waveform — 填充波形表
- *
- * @param buf      目标缓冲区
- * @param ratio    每周期点数
- * @param amp      幅度系数 (0~1)
- * @param phase    相位偏移 (度)
- * @param type     波形类型
- */
+ * ============================================================ */
 static void gen_waveform(uint16_t *buf, uint16_t ratio,
-                         float amp, float phase, WaveType type)
+                         float amp, float phase, WaveType type,
+                         uint32_t channel)
 {
     float phase_rad = phase * PI / 180.0f;
 
     for (uint16_t i = 0; i < ratio; i++)
     {
-        float t = (float)i / (float)ratio;       /* 0.0 ~ 1.0 相位归一化 */
-        float phase_now = 2.0f * PI * t + phase_rad;
-        float raw = 0.0f;
+        float t = (float)i / (float)ratio;
+        float raw;
 
-        switch (type)
+        if (type == WAVE_COMPOSITE)
         {
-        case WAVE_SINE:
-            raw = arm_cos_f32(phase_now);         /* [-1, +1] */
-            break;
-
-        case WAVE_TRIANGLE:
-            /* 三角波: 0→1→0→-1→0 */
-            if (t < 0.25f)
-                raw = 4.0f * t;                   /*  0 → +1 */
-            else if (t < 0.75f)
-                raw = 2.0f - 4.0f * t;            /* +1 → -1 */
+            /* 分量叠加: 依次采样每个分量, 累加 */
+            WaveComponent *comps;
+            uint8_t count;
+            if (channel == DAC_CHANNEL_1)
+                { comps = comps1; count = comp_count1; }
             else
-                raw = 4.0f * t - 4.0f;            /* -1 →  0 */
-            break;
+                { comps = comps2; count = comp_count2; }
 
-        case WAVE_SQUARE:
-            raw = (t < 0.5f) ? 1.0f : -1.0f;
-            break;
+            float sum = 0.0f;
+            for (uint8_t c = 0; c < count; c++)
+            {
+                /* 按频率倍数独立计算相位 */
+                float tc = fmodf(t * comps[c].freq_multiplier, 1.0f);
+                sum += wave_sample(comps[c].type, tc, 0.0f) * comps[c].amplitude;
+            }
 
-        case WAVE_SAWTOOTH:
-            raw = 2.0f * t - 1.0f;                /* -1 → +1 */
-            break;
-
-        default:
-            raw = arm_cos_f32(phase_now);
-            break;
+            /* 归一化: 总幅度 = 各分量幅度之和 */
+            float max_sum = 0.0f;
+            for (uint8_t c = 0; c < count; c++)
+                max_sum += comps[c].amplitude;
+            raw = (max_sum > 0.001f) ? (sum / max_sum) : 0.0f;
+        }
+        else
+        {
+            raw = wave_sample(type, t, phase_rad);
         }
 
-        /* 映射到 DAC 范围，留安全边距避免缓冲器饱和削顶 */
+        /* 映射到 DAC 范围, 留安全边距 */
         float value = 2048.0f + 2047.0f * amp * raw;
-        if (value > 4000.0f) value = 4000.0f;   /* 上边距: 避免缓冲器高端饱和 */
-        if (value < 95.0f)   value = 95.0f;     /* 下边距: 避免缓冲器低端饱和 */
+        if (value > 4000.0f) value = 4000.0f;
+        if (value < 95.0f)   value = 95.0f;
         buf[i] = (uint16_t)value;
     }
 }
 
 /* ============================================================
- * API 实现
+ * DAC_Wave_Init
  * ============================================================ */
-
-/**
- * DAC_Wave_Init — 初始化双通道, 默认输出 1kHz 正弦
- */
 void DAC_Wave_Init(void)
 {
-    /* 默认配置 */
     DAC_Wave_Config(DAC_CHANNEL_1, 1000.0f, 0.8f, 0.0f, WAVE_SINE);
     DAC_Wave_Config(DAC_CHANNEL_2, 1000.0f, 0.8f, 0.0f, WAVE_SINE);
 
-    /* 启动 TIM6 */
     HAL_TIM_Base_Start(&htim6);
 
-    /* 启动双通道 DAC DMA */
     HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1,
                       (uint32_t *)buf1, ratio1, DAC_ALIGN_12B_R);
     HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2,
@@ -116,28 +131,21 @@ void DAC_Wave_Init(void)
     inited = 1;
 }
 
-/**
- * DAC_Wave_Config — 配置一个通道的全部参数并生成波形
- *
- * @return 实际输出频率
- */
+/* ============================================================
+ * DAC_Wave_Config
+ * ============================================================ */
 float DAC_Wave_Config(uint32_t channel, float freq_hz, float amplitude,
                       float phase_deg, WaveType wave)
 {
-    /* 计算每周期点数 (必须为整数) */
     uint16_t ratio = (uint16_t)(DAC_UPDATE_RATE / freq_hz);
-    if (ratio < 2)  ratio = 2;           /* 最少2个点 */
+    if (ratio < 2)  ratio = 2;
     if (ratio > DAC_BUF_SIZE) ratio = DAC_BUF_SIZE;
 
     float actual_freq = DAC_UPDATE_RATE / (float)ratio;
-
-    /* 选择缓冲区 */
     uint16_t *buf = (channel == DAC_CHANNEL_1) ? buf1 : buf2;
 
-    /* 生成波形 */
-    gen_waveform(buf, ratio, amplitude, phase_deg, wave);
+    gen_waveform(buf, ratio, amplitude, phase_deg, wave, channel);
 
-    /* 保存状态 */
     if (channel == DAC_CHANNEL_1)
     {
         ratio1 = ratio; freq1 = actual_freq;
@@ -152,12 +160,13 @@ float DAC_Wave_Config(uint32_t channel, float freq_hz, float amplitude,
     return actual_freq;
 }
 
-/* ── 以下 4 个 Set 函数只修改参数，不立即生效 ── */
-
+/* ============================================================
+ * Set 系列 (只改参数, 不生效)
+ * ============================================================ */
 float DAC_Wave_SetFreq(uint32_t channel, float freq_hz)
 {
     uint16_t ratio = (uint16_t)(DAC_UPDATE_RATE / freq_hz);
-    if (ratio < 2)  ratio = 2;
+    if (ratio < 2) ratio = 2;
     if (ratio > DAC_BUF_SIZE) ratio = DAC_BUF_SIZE;
 
     if (channel == DAC_CHANNEL_1)
@@ -184,11 +193,51 @@ void DAC_Wave_SetType(uint32_t channel, WaveType wave)
     else                          wave2 = wave;
 }
 
-/**
+/* ============================================================
+ * DAC_Wave_SetComposite — 配置叠加波形
+ * ============================================================ */
+void DAC_Wave_SetComposite(uint32_t channel, float freq_hz,
+                           WaveComponent *components, uint8_t count)
+{
+    if (count > MAX_COMPONENTS) count = MAX_COMPONENTS;
+
+    uint16_t ratio = (uint16_t)(DAC_UPDATE_RATE / freq_hz);
+    if (ratio < 2) ratio = 2;
+    if (ratio > DAC_BUF_SIZE) ratio = DAC_BUF_SIZE;
+
+    if (channel == DAC_CHANNEL_1)
+    {
+        ratio1 = ratio; freq1 = DAC_UPDATE_RATE / ratio;
+        wave1 = WAVE_COMPOSITE;
+        comp_count1 = count;
+        for (uint8_t i = 0; i < count; i++) comps1[i] = components[i];
+    }
+    else
+    {
+        ratio2 = ratio; freq2 = DAC_UPDATE_RATE / ratio;
+        wave2 = WAVE_COMPOSITE;
+        comp_count2 = count;
+        for (uint8_t i = 0; i < count; i++) comps2[i] = components[i];
+    }
+
+    /* 立即生成并生效 */
+    uint16_t *buf = (channel == DAC_CHANNEL_1) ? buf1 : buf2;
+    float amp = (channel == DAC_CHANNEL_1) ? amp1 : amp2;
+    gen_waveform(buf, (channel == DAC_CHANNEL_1) ? ratio1 : ratio2,
+                 amp, 0.0f, WAVE_COMPOSITE, channel);
+
+    if (inited)
+    {
+        HAL_DAC_Stop_DMA(&hdac1, channel);
+        HAL_DAC_Start_DMA(&hdac1, channel, (uint32_t *)buf,
+                          (channel == DAC_CHANNEL_1) ? ratio1 : ratio2,
+                          DAC_ALIGN_12B_R);
+    }
+}
+
+/* ============================================================
  * DAC_Wave_Update — 应用参数修改
- *
- * 流程: 停止 DMA → 重新生成波形 → 重启 DMA
- */
+ * ============================================================ */
 void DAC_Wave_Update(uint32_t channel)
 {
     if (!inited) return;
@@ -209,16 +258,15 @@ void DAC_Wave_Update(uint32_t channel)
         amp = amp2; phase = phase2; wave = wave2;
     }
 
-    /* 重新生成波形 */
-    gen_waveform(buf, ratio, amp, phase, wave);
+    gen_waveform(buf, ratio, amp, phase, wave, channel);
 
-    /* 重启 DAC DMA */
     HAL_DAC_Stop_DMA(&hdac1, channel);
     HAL_DAC_Start_DMA(&hdac1, channel, (uint32_t *)buf, ratio, DAC_ALIGN_12B_R);
 }
 
-/* ── 启停控制 ── */
-
+/* ============================================================
+ * 启停控制
+ * ============================================================ */
 void DAC_Wave_Stop(uint32_t channel)
 {
     HAL_DAC_Stop_DMA(&hdac1, channel);
