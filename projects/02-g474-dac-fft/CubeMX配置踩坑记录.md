@@ -226,7 +226,24 @@ HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
 **应用**：任务二第1题需要"相位可控的输出"，正确做法是：
 1. 测输入信号的**频率**（用 FFT + 过零检测，足够准）
 2. 用 `DAC_Wave_SetPhase()` 控制输出信号的相位偏移
-3. 相位差由用户设定，不需要从 ADC 测量绝对相位（arm_math.h 提供了 PI、TWO_PI 等）。
+3. 相位差由用户设定，不需要从 ADC 测量绝对相位
+
+---
+
+## 坑 #17：花括号不配对 → 全文件连锁报错 (不要乱改 include)
+
+**现象**：20+ 条错误——`PeakInfo` 未定义、`uint8_t` 未定义、`arm_rfft_fast_instance_f32` 未找到...
+
+**根因**：main.c 少了一个 `}`。编译器把后面的所有代码当成了同一个函数的内部，所有类型声明都报错。
+
+**正确排查顺序**：
+1. 看**第一条**报错，不是第 10 条
+2. `expected declaration or statement at end of input` = main.c 花括号不配对
+3. 修好花括号后，后面 20 条错全消失——**不要再动 include 文件**
+
+**教训**：
+- 连锁错误要看第一条，中间那些都是假的
+- main.c 报 `end of input` — 缺 `}`, 别去改头文件
 
 ---
 
