@@ -173,7 +173,26 @@ DMA 的 Peripheral Data Width 配成 Half Word → DMA 传输立即报错停掉 
 - 不同芯片系列的外设总线不同，DMA 位宽要求也不同
 - F1/F4 的经验不能直接搬到 G4
 - PDF 教程和参考手册是最好的排查工具——用户对照发现 3 处差异，其中第 3 个就是根因
-- TIM 选 TIM6/TIM15 无所谓（都是 Update Event→TRGO），DAC1 单/双通道也无所谓，**DMA 位宽不对才是致命的**（arm_math.h 提供了 PI、TWO_PI 等）。
+- TIM 选 TIM6/TIM15 无所谓（都是 Update Event→TRGO），DAC1 单/双通道也无所谓，**DMA 位宽不对才是致命的**
+
+---
+
+## 坑 #14：DAC 输出削顶 — Output Buffer 导致饱和
+
+**现象**：PA4 正弦波正常，PA5 正弦波顶部被削平。两路配置完全相同，幅度都是 0.8。
+
+把 PA5 幅度降到 0.4 → 削顶消失。
+
+**根因**：DAC Output Buffer 在不同通道上的饱和特性有微小差异。PA5 的缓冲器在高端（接近 VDDA）提前进入饱和区，输出被钳位。
+
+**修复**：
+1. CubeMX → DAC1 → Out1 Settings & Out2 Settings → Output Buffer = **Disable**
+2. 代码里加安全边距：DAC 值上限从 4095 降到 **4000**，下限从 0 提到 **95**
+
+**教训**：
+- DAC Output Buffer 对波形输出（需要满摆幅）是负担不是帮助
+- 即使两路配置完全相同，硬件个体差异也可能导致不同表现
+- 波形输出应用建议**关闭 Output Buffer**，代码里留安全边距（arm_math.h 提供了 PI、TWO_PI 等）。
 
 ---
 

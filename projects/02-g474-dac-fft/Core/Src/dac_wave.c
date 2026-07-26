@@ -83,10 +83,10 @@ static void gen_waveform(uint16_t *buf, uint16_t ratio,
             break;
         }
 
-        /* 映射到 DAC 范围 [0, 4095] */
+        /* 映射到 DAC 范围，留安全边距避免缓冲器饱和削顶 */
         float value = 2048.0f + 2047.0f * amp * raw;
-        if (value > 4095.0f) value = 4095.0f;
-        if (value < 0.0f)    value = 0.0f;
+        if (value > 4000.0f) value = 4000.0f;   /* 上边距: 避免缓冲器高端饱和 */
+        if (value < 95.0f)   value = 95.0f;     /* 下边距: 避免缓冲器低端饱和 */
         buf[i] = (uint16_t)value;
     }
 }
