@@ -1,19 +1,15 @@
 /**
- * adc_fft.h — ADC采集 + FFT频谱分析 (STM32G474)
+ * adc_fft.h — ADC采集 + FFT频谱分析 v2 (STM32G474)
  *
- * 功能:
- *   - ADC1 DMA 采集 (TIM2 触发, 250kHz)
- *   - CMSIS-DSP 实数 FFT 分析
- *   - 提取基频信号的 频率/幅度/相位
+ * 新增:
+ *   - 多峰值检测 (叠加信号分离)
+ *   - 过零检测辅助测频 (精度远高于 FFT 分辨率)
+ *   - 谐波分析, 自动识别波形类型
+ *   - 相位警告 (单通道相位会漂, 需双通道测相位差)
  *
  * 依赖:
  *   - CubeMX: ADC1_IN1(PA0), TIM2 TRGO 触发, DMA Circular
- *   - CMSIS-DSP 库: arm_math.h
- *
- * FFT 参数:
- *   - FFT_SIZE = 2048 点
- *   - 采样率 = 250kHz (TIM2)
- *   - 频率分辨率 ≈ 122Hz
+ *   - CMSIS-DSP 库
  */
 
 #ifndef __ADC_FFT_H
@@ -26,57 +22,42 @@
  * 宏定义
  * ============================================================ */
 
-#define ADC_BUF_SIZE    2048       /* ADC DMA 缓冲区大小 */
-#define FFT_SIZE        2048       /* FFT 点数 (必须为 2 的幂) */
+#define ADC_BUF_SIZE    2048
+#define FFT_SIZE        2048
+#define MAX_PEAKS       8       /* 最多检测的频谱峰个数 */
+#define PEAK_THRESHOLD  0.02f   /* 高度低于基频峰值 2% 的峰忽略 */
 
 /* ============================================================
  * 数据结构
  * ============================================================ */
 
 /**
+ * PeakInfo — 一个频谱峰的信息
+ */
+typedef struct {
+    float freq_hz;      /* 频率 (Hz) */
+    float amplitude;    /* 归一化幅度 (0~1) */
+    float phase_deg;    /* 相位 (度), ⚠️ 单通道会漂移! */
+} PeakInfo;
+
+/**
  * FFT_Result — 一次 FFT 分析的完整结果
  */
 typedef struct {
-    float freq_hz;      /* 基频 (Hz) */
-    float amplitude;    /* 归一化幅度 (0.0 ~ 1.0, 相对 ADC 满量程) */
-    float phase_deg;    /* 相位 (度, -180 ~ +180) */
-    float dc_offset;    /* 直流偏置 */
-    uint16_t peak_idx;  /* 峰值所在 FFT bin 索引 */
+    PeakInfo peaks[MAX_PEAKS];  /* 检测到的频谱峰 (按幅度降序) */
+    uint8_t  peak_count;        /* 实际峰数 */
+    float    dc_offset_v;       /* 直流偏置 (V) */
+    float    freq_zc;           /* 过零检测频率 (Hz), 比 FFT 更准 */
+    char     waveform[16];      /* 波形类型: SINE / TRIANGLE / SQUARE / SAWTOOTH / COMPOSITE */
 } FFT_Result;
 
 /* ============================================================
  * API 函数
  * ============================================================ */
 
-/**
- * ADC_FFT_Init — 初始化 ADC 采集和 FFT
- *
- * 执行: ADC 校准 → 启动 DMA → 启动 TIM2
- * 之后 DMA 在后台循环采集，不占用 CPU。
- */
-void ADC_FFT_Init(void);
+void       ADC_FFT_Init(void);          /* 初始化, 启动采集 */
+uint8_t    ADC_FFT_DataReady(void);     /* 数据就绪? */
+FFT_Result ADC_FFT_Analyze(void);       /* 分析, 返回完整结果 */
+float      ADC_FFT_GetSampleRate(void); /* 采样率 (Hz) */
 
-/**
- * ADC_FFT_DataReady — 检查是否有新数据
- *
- * @return 0=还在采集中  1=数据就绪可分析
- *
- * 使用方式: 在主循环中轮询，返回 1 时调用 ADC_FFT_Analyze()
- */
-uint8_t ADC_FFT_DataReady(void);
-
-/**
- * ADC_FFT_Analyze — 对最新数据进行 FFT 分析
- *
- * @return FFT_Result 包含频率/幅度/相位
- *
- * 调用后自动重启 ADC 采集。
- */
-FFT_Result ADC_FFT_Analyze(void);
-
-/**
- * ADC_FFT_GetSampleRate — 返回当前 ADC 采样率 (Hz)
- */
-float ADC_FFT_GetSampleRate(void);
-
-#endif /* __ADC_FFT_H */
+#endif

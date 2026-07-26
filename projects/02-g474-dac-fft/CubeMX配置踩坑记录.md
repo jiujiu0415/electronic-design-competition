@@ -192,7 +192,41 @@ DMA 的 Peripheral Data Width 配成 Half Word → DMA 传输立即报错停掉 
 **教训**：
 - DAC Output Buffer 对波形输出（需要满摆幅）是负担不是帮助
 - 即使两路配置完全相同，硬件个体差异也可能导致不同表现
-- 波形输出应用建议**关闭 Output Buffer**，代码里留安全边距（arm_math.h 提供了 PI、TWO_PI 等）。
+- 波形输出应用建议**关闭 Output Buffer**，代码里留安全边距
+
+---
+
+## 坑 #15：printf 不输出 — _write 重定向在 CubeIDE 不一定生效
+
+**现象**：`_write()` 已按标准写法重定向到 USART2，printf 仍无输出。
+
+但 `HAL_UART_Transmit(&huart2, ...)` 直接用能收到数据 → 串口硬件正常。
+
+**原因**：CubeIDE GCC 在某些优化级别/Semihosting 配置下，_write 重定向被 Semihosting 覆盖。
+
+**修复**：不用 printf，改用 `snprintf + HAL_UART_Transmit` 组合：
+```c
+snprintf(buf, sizeof(buf), "Freq: %.1f Hz\r\n", freq);
+HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
+```
+或者封装成 `uart_print()` 简化调用。
+
+**教训**：嵌入式 printf 不可靠时，直接用 HAL 串口发送。
+
+---
+
+## 坑 #16：FFT 单通道相位一直漂移 — 不是 bug
+
+**现象**：每次 FFT 分析结果中，同一信号的相位值每次都不一样。
+
+**根因**：ADC 采样是 TIM2 触发的，但 DMA 循环采集的**起始点**和信号相位之间没有固定关系。FFT 计算的相位 = 信号相对于采样窗口起点的相位，窗口起点每次随机 → 相位漂移。
+
+**本质**：这是**绝对相位无法测量**，不是 bug。FFT 只能测量**相对相位**（两路信号之间的相位差）。
+
+**应用**：任务二第1题需要"相位可控的输出"，正确做法是：
+1. 测输入信号的**频率**（用 FFT + 过零检测，足够准）
+2. 用 `DAC_Wave_SetPhase()` 控制输出信号的相位偏移
+3. 相位差由用户设定，不需要从 ADC 测量绝对相位（arm_math.h 提供了 PI、TWO_PI 等）。
 
 ---
 
