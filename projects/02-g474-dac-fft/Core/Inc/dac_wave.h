@@ -17,7 +17,7 @@
 #ifndef __DAC_WAVE_H
 #define __DAC_WAVE_H
 
-#include "main.h"
+#include "stm32g4xx_hal.h"
 #include "arm_math.h"
 
 /* ============================================================
