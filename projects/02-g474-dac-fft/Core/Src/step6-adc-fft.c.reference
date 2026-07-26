@@ -1,0 +1,100 @@
+/**
+ * 第6步: ADC采集 + FFT分析
+ *
+ * 集成 dac_wave 和 adc_fft 两个模块。
+ *
+ * 硬件连接: 杜邦线短接 PA4(DAC1_OUT1) ↔ PA0(ADC1_IN1)
+ * 信号流: PA4发信号 → PA0采集 → FFT分析 → 串口打印结果
+ */
+
+/* ============================================================
+ * ① USER CODE BEGIN Includes
+ * ============================================================ */
+#include "dac_wave.h"
+#include "adc_fft.h"
+#include "stdio.h"
+
+/* ============================================================
+ * ② USER CODE BEGIN PD
+ * ============================================================ */
+// 不需要, 两个模块各自定义了宏
+
+/* ============================================================
+ * ③ USER CODE BEGIN PV
+ * ============================================================ */
+char tx_buf[256];
+
+/* ============================================================
+ * ④ USER CODE BEGIN 0
+ * ============================================================ */
+#ifdef __GNUC__
+int _write(int fd, char *ptr, int len)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, 100);
+    return len;
+}
+#endif
+/* ============================================================
+ * 注意: HAL_ADC_ConvCpltCallback 已在 adc_fft.c 中定义,
+ *       这里不要再重复定义！
+ * ============================================================ */
+
+/* ============================================================
+ * ⑤ USER CODE BEGIN 2 — main() 初始化
+ * ============================================================ */
+  /* USER CODE BEGIN 2 */
+
+  /* 启动 DAC: PA4 输出 1kHz 正弦, PA5 输出 3kHz 三角 */
+  DAC_Wave_Init();
+  DAC_Wave_SetFreq(DAC_CHANNEL_2, 3000.0f);
+  DAC_Wave_SetType(DAC_CHANNEL_2, WAVE_TRIANGLE);
+  DAC_Wave_Update(DAC_CHANNEL_2);
+
+  /* 启动 ADC + FFT */
+  ADC_FFT_Init();
+
+  printf("\r\n=== DAC-ADC-FFT System Ready ===\r\n");
+  printf("PA4: 1kHz sine  → ADC IN1 (jumper)\r\n");
+  printf("PA5: 3kHz tri   → scope\r\n");
+  printf("Sample rate: %.0f Hz\r\n", ADC_FFT_GetSampleRate());
+  printf("FFT size: %d, resolution: %.1f Hz\r\n",
+         FFT_SIZE, ADC_FFT_GetSampleRate() / FFT_SIZE);
+  printf("================================\r\n\r\n");
+
+  /* USER CODE END 2 */
+
+/* ============================================================
+ * ⑥ USER CODE BEGIN 3 — while(1) 主循环
+ * ============================================================ */
+  /* USER CODE BEGIN 3 */
+
+  /* 轮询: ADC 数据就绪 → 做 FFT 分析 */
+  if (ADC_FFT_DataReady())
+  {
+      FFT_Result r = ADC_FFT_Analyze();
+
+      snprintf(tx_buf, sizeof(tx_buf),
+               "Freq: %.1f Hz | Amp: %.3f | Phase: %.1f deg | DC: %.2f V\r\n",
+               r.freq_hz, r.amplitude, r.phase_deg, r.dc_offset);
+      HAL_UART_Transmit(&huart2, (uint8_t *)tx_buf, strlen(tx_buf), 100);
+  }
+
+  /* USER CODE END 3 */
+
+/* ============================================================
+ * ⑦ main.h — USER CODE BEGIN Private defines
+ * ============================================================ */
+// (不需要额外 extern, 两个模块自己管理)
+
+/* ============================================================
+ * 文件结构:
+ *   Core/Inc/dac_wave.h  ← DAC 模块接口
+ *   Core/Src/dac_wave.c  ← DAC 模块实现
+ *   Core/Inc/adc_fft.h   ← ADC+FFT 模块接口
+ *   Core/Src/adc_fft.c   ← ADC+FFT 模块实现
+ *   Core/Src/main.c       ← 主程序 (调用两个模块)
+ *
+ * 硬件检查:
+ *   ✅ PA4 ↔ PA0 杜邦线短接 (DAC输出 → ADC输入)
+ *   ✅ 示波器CH1接PA4, CH2接PA5
+ * ============================================================ */
