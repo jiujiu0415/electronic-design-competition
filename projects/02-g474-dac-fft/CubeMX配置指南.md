@@ -162,10 +162,14 @@ Configuration → Analog → DAC1 → **DAC Out1 Settings** 标签：
 | Priority | **Low** | |
 | Increment Address (Peripheral) | ☐ **不勾** | DAC 数据寄存器是固定地址 |
 | Increment Address (Memory) | ☑ **勾上** | 依次读 `dac_buf[0],[1],[2]...` |
-| Data Width (Peripheral) | **Half Word** | |
-| Data Width (Memory) | **Half Word** | |
+| Data Width (Peripheral) | **Word** ⚠️ | G4 的 DAC 在 AHB 总线，必须 32-bit |
+| Data Width (Memory) | **Half Word** | 对应 uint16_t 波形数组 |
 
 配完 CH1 后，再点 **Add** → 选 **DAC1_CH2** → 同样配置。
+
+> ⚠️ **为什么 Peripheral 必须用 Word？** STM32G4 的 DAC 挂在 AHB 总线上，
+> AHB 不支持 16-bit 传输。用 Half Word 会导致 DMA 传输错误，
+> DAC 输出始终为 0V。这是 G4 和 F1/F4 系列的重要区别！
 
 > 📌 其余未提到的 DMA 选项（FIFO、Burst等）全部保持默认。
 

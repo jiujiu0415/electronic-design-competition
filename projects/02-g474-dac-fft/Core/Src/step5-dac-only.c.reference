@@ -10,6 +10,12 @@
  *   两路由 TIM6 (100kHz) + DMA 循环驱动
  *
  * 硬件: STM32G474RET6, HSI→PLL→160MHz
+ *
+ * ⚠️ 前置配置要求:
+ *   CubeMX → DAC1 → DMA Settings:
+ *     Data Width (Peripheral) = WORD (不是 Half Word!)
+ *     Data Width (Memory)    = Half Word
+ *   原因: G4的DAC在AHB总线, 只接受32-bit DMA传输
  */
 
 /* ============================================================

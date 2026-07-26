@@ -148,7 +148,32 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)  // 写在 main.c 里
 
 **教训**：
 - **修复了对话框里的代码，必须同步更新保存的 reference 文件**。不能只在对话框说"改成xxx"，必须把文件也改了。
-- 引用第三方库时，先确认库里有没有现成的宏（arm_math.h 提供了 PI、TWO_PI 等）。
+- 引用第三方库时，先确认库里有没有现成的宏
+
+---
+
+## 坑 #13：DAC DMA 输出始终 0V — Peripheral Data Width 必须用 Word！
+
+**现象**：DAC 配置 Tim+DMA 输出波形，示波器测 PA4/PA5 始终 0V。串口有输出（程序没崩）。
+
+**根因**：STM32G4 的 DAC 挂在 **AHB 总线**，AHB 不支持 16-bit 传输。
+DMA 的 Peripheral Data Width 配成 Half Word → DMA 传输立即报错停掉 → DAC 永远收不到数据。
+
+**PDF 原文**（第6页）："需要注意 STM32G4 的 DAC 数据寄存器是 32 位的"
+
+**对比**：
+| 系列 | DAC 所在总线 | DMA 外设端位宽 |
+|------|-------------|---------------|
+| F1/F4 | APB | Half Word (16-bit) |
+| **G4** | **AHB** | **Word (32-bit)** ⚠️ |
+
+**修复**：CubeMX → DAC1 → DMA Settings → Data Width (Peripheral) = **Word**
+
+**教训**：
+- 不同芯片系列的外设总线不同，DMA 位宽要求也不同
+- F1/F4 的经验不能直接搬到 G4
+- PDF 教程和参考手册是最好的排查工具——用户对照发现 3 处差异，其中第 3 个就是根因
+- TIM 选 TIM6/TIM15 无所谓（都是 Update Event→TRGO），DAC1 单/双通道也无所谓，**DMA 位宽不对才是致命的**（arm_math.h 提供了 PI、TWO_PI 等）。
 
 ---
 
