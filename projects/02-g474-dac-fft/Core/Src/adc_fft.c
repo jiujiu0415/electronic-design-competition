@@ -3,6 +3,7 @@
  */
 
 #include "adc_fft.h"
+#include <stdint.h>
 #include <math.h>
 #include <string.h>
 /* ============================================================
