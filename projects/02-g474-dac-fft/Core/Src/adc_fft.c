@@ -5,8 +5,6 @@
 #include "adc_fft.h"
 #include <math.h>
 #include <string.h>
-#include <stdlib.h>
-
 /* ============================================================
  * 外部引用
  * ============================================================ */
@@ -24,15 +22,6 @@ static float32_t fft_in[FFT_SIZE];
 static float32_t fft_out[FFT_SIZE * 2];
 static float32_t fft_mag[FFT_SIZE];
 static float sample_rate = 0.0f;
-
-/* ============================================================
- * 峰值检测辅助
- * ============================================================ */
-static int cmp_desc(const void *a, const void *b)
-{
-    float fa = *(float *)a, fb = *(float *)b;
-    return (fa < fb) ? 1 : ((fa > fb) ? -1 : 0);
-}
 
 /* ============================================================
  * 过零检测: 统计 ADC 缓冲区中穿越 DC 均值的次数

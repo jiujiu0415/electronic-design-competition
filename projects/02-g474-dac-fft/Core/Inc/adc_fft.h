@@ -15,7 +15,7 @@
 #ifndef __ADC_FFT_H
 #define __ADC_FFT_H
 
-#include "stm32g4xx_hal.h"
+#include "main.h"
 #include "arm_math.h"
 
 /* ============================================================
