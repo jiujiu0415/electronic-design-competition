@@ -1,0 +1,562 @@
+[
+  {
+    "freq": 100.0,
+    "gain_db": -11.88,
+    "phase_deg": 6.5,
+    "vin": 0.753,
+    "vout": 0.192
+  },
+  {
+    "freq": 109.0,
+    "gain_db": -11.83,
+    "phase_deg": 6.9,
+    "vin": 0.753,
+    "vout": 0.193
+  },
+  {
+    "freq": 119.0,
+    "gain_db": -11.78,
+    "phase_deg": 7.5,
+    "vin": 0.753,
+    "vout": 0.194
+  },
+  {
+    "freq": 130.0,
+    "gain_db": -11.73,
+    "phase_deg": 8.0,
+    "vin": 0.753,
+    "vout": 0.195
+  },
+  {
+    "freq": 142.0,
+    "gain_db": -11.66,
+    "phase_deg": 8.6,
+    "vin": 0.753,
+    "vout": 0.197
+  },
+  {
+    "freq": 155.0,
+    "gain_db": -11.57,
+    "phase_deg": 9.2,
+    "vin": 0.753,
+    "vout": 0.199
+  },
+  {
+    "freq": 169.0,
+    "gain_db": -11.48,
+    "phase_deg": 9.7,
+    "vin": 0.753,
+    "vout": 0.201
+  },
+  {
+    "freq": 184.0,
+    "gain_db": -11.38,
+    "phase_deg": 10.3,
+    "vin": 0.753,
+    "vout": 0.203
+  },
+  {
+    "freq": 201.0,
+    "gain_db": -11.26,
+    "phase_deg": 10.9,
+    "vin": 0.753,
+    "vout": 0.206
+  },
+  {
+    "freq": 220.0,
+    "gain_db": -11.14,
+    "phase_deg": 11.4,
+    "vin": 0.753,
+    "vout": 0.209
+  },
+  {
+    "freq": 240.0,
+    "gain_db": -11.0,
+    "phase_deg": 11.9,
+    "vin": 0.753,
+    "vout": 0.212
+  },
+  {
+    "freq": 262.0,
+    "gain_db": -10.85,
+    "phase_deg": 12.3,
+    "vin": 0.753,
+    "vout": 0.216
+  },
+  {
+    "freq": 286.0,
+    "gain_db": -10.7,
+    "phase_deg": 12.7,
+    "vin": 0.753,
+    "vout": 0.22
+  },
+  {
+    "freq": 312.0,
+    "gain_db": -10.55,
+    "phase_deg": 13.0,
+    "vin": 0.753,
+    "vout": 0.223
+  },
+  {
+    "freq": 340.0,
+    "gain_db": -10.4,
+    "phase_deg": 13.2,
+    "vin": 0.753,
+    "vout": 0.227
+  },
+  {
+    "freq": 371.0,
+    "gain_db": -10.26,
+    "phase_deg": 13.3,
+    "vin": 0.753,
+    "vout": 0.231
+  },
+  {
+    "freq": 405.0,
+    "gain_db": -10.12,
+    "phase_deg": 13.2,
+    "vin": 0.753,
+    "vout": 0.235
+  },
+  {
+    "freq": 442.0,
+    "gain_db": -9.98,
+    "phase_deg": 13.1,
+    "vin": 0.753,
+    "vout": 0.239
+  },
+  {
+    "freq": 483.0,
+    "gain_db": -9.84,
+    "phase_deg": 12.9,
+    "vin": 0.753,
+    "vout": 0.242
+  },
+  {
+    "freq": 527.0,
+    "gain_db": -9.71,
+    "phase_deg": 12.6,
+    "vin": 0.753,
+    "vout": 0.246
+  },
+  {
+    "freq": 575.0,
+    "gain_db": -9.59,
+    "phase_deg": 12.1,
+    "vin": 0.753,
+    "vout": 0.249
+  },
+  {
+    "freq": 627.0,
+    "gain_db": -9.48,
+    "phase_deg": 11.5,
+    "vin": 0.753,
+    "vout": 0.253
+  },
+  {
+    "freq": 685.0,
+    "gain_db": -9.37,
+    "phase_deg": 10.9,
+    "vin": 0.753,
+    "vout": 0.256
+  },
+  {
+    "freq": 747.0,
+    "gain_db": -9.27,
+    "phase_deg": 10.2,
+    "vin": 0.753,
+    "vout": 0.259
+  },
+  {
+    "freq": 815.0,
+    "gain_db": -9.18,
+    "phase_deg": 9.5,
+    "vin": 0.752,
+    "vout": 0.261
+  },
+  {
+    "freq": 890.0,
+    "gain_db": -9.1,
+    "phase_deg": 8.7,
+    "vin": 0.752,
+    "vout": 0.264
+  },
+  {
+    "freq": 971.0,
+    "gain_db": -9.03,
+    "phase_deg": 7.9,
+    "vin": 0.753,
+    "vout": 0.266
+  },
+  {
+    "freq": 1060.0,
+    "gain_db": -8.96,
+    "phase_deg": 7.0,
+    "vin": 0.753,
+    "vout": 0.268
+  },
+  {
+    "freq": 1157.0,
+    "gain_db": -8.9,
+    "phase_deg": 6.1,
+    "vin": 0.753,
+    "vout": 0.27
+  },
+  {
+    "freq": 1263.0,
+    "gain_db": -8.86,
+    "phase_deg": 5.2,
+    "vin": 0.752,
+    "vout": 0.271
+  },
+  {
+    "freq": 1378.0,
+    "gain_db": -8.81,
+    "phase_deg": 4.3,
+    "vin": 0.752,
+    "vout": 0.273
+  },
+  {
+    "freq": 1504.0,
+    "gain_db": -8.77,
+    "phase_deg": 3.4,
+    "vin": 0.752,
+    "vout": 0.274
+  },
+  {
+    "freq": 1641.0,
+    "gain_db": -8.73,
+    "phase_deg": 2.5,
+    "vin": 0.752,
+    "vout": 0.275
+  },
+  {
+    "freq": 1791.0,
+    "gain_db": -8.71,
+    "phase_deg": 1.6,
+    "vin": 0.752,
+    "vout": 0.276
+  },
+  {
+    "freq": 1955.0,
+    "gain_db": -8.68,
+    "phase_deg": 0.6,
+    "vin": 0.752,
+    "vout": 0.277
+  },
+  {
+    "freq": 2134.0,
+    "gain_db": -8.66,
+    "phase_deg": -0.4,
+    "vin": 0.752,
+    "vout": 0.278
+  },
+  {
+    "freq": 2329.0,
+    "gain_db": -8.64,
+    "phase_deg": -1.3,
+    "vin": 0.752,
+    "vout": 0.278
+  },
+  {
+    "freq": 2541.0,
+    "gain_db": -8.62,
+    "phase_deg": -2.4,
+    "vin": 0.752,
+    "vout": 0.279
+  },
+  {
+    "freq": 2774.0,
+    "gain_db": -8.61,
+    "phase_deg": -3.4,
+    "vin": 0.752,
+    "vout": 0.279
+  },
+  {
+    "freq": 3027.0,
+    "gain_db": -8.6,
+    "phase_deg": -4.5,
+    "vin": 0.752,
+    "vout": 0.28
+  },
+  {
+    "freq": 3304.0,
+    "gain_db": -8.58,
+    "phase_deg": -5.6,
+    "vin": 0.752,
+    "vout": 0.28
+  },
+  {
+    "freq": 3605.0,
+    "gain_db": -8.57,
+    "phase_deg": -6.7,
+    "vin": 0.752,
+    "vout": 0.28
+  },
+  {
+    "freq": 3935.0,
+    "gain_db": -8.56,
+    "phase_deg": -8.0,
+    "vin": 0.752,
+    "vout": 0.281
+  },
+  {
+    "freq": 4294.0,
+    "gain_db": -8.55,
+    "phase_deg": -9.3,
+    "vin": 0.752,
+    "vout": 0.281
+  },
+  {
+    "freq": 4687.0,
+    "gain_db": -8.53,
+    "phase_deg": -10.7,
+    "vin": 0.752,
+    "vout": 0.282
+  },
+  {
+    "freq": 5115.0,
+    "gain_db": -8.53,
+    "phase_deg": -12.2,
+    "vin": 0.752,
+    "vout": 0.281
+  },
+  {
+    "freq": 5583.0,
+    "gain_db": -8.52,
+    "phase_deg": -13.9,
+    "vin": 0.747,
+    "vout": 0.28
+  },
+  {
+    "freq": 6093.0,
+    "gain_db": -8.52,
+    "phase_deg": -15.6,
+    "vin": 0.752,
+    "vout": 0.282
+  },
+  {
+    "freq": 6649.0,
+    "gain_db": -8.51,
+    "phase_deg": -17.6,
+    "vin": 0.739,
+    "vout": 0.277
+  },
+  {
+    "freq": 7257.0,
+    "gain_db": -8.52,
+    "phase_deg": -19.7,
+    "vin": 0.731,
+    "vout": 0.274
+  },
+  {
+    "freq": 7920.0,
+    "gain_db": -8.53,
+    "phase_deg": -22.1,
+    "vin": 0.711,
+    "vout": 0.266
+  },
+  {
+    "freq": 8644.0,
+    "gain_db": -8.53,
+    "phase_deg": -24.8,
+    "vin": 0.716,
+    "vout": 0.268
+  },
+  {
+    "freq": 9434.0,
+    "gain_db": -8.56,
+    "phase_deg": -27.8,
+    "vin": 0.721,
+    "vout": 0.269
+  },
+  {
+    "freq": 10296.0,
+    "gain_db": -8.58,
+    "phase_deg": -31.2,
+    "vin": 0.745,
+    "vout": 0.278
+  },
+  {
+    "freq": 11237.0,
+    "gain_db": -8.64,
+    "phase_deg": -35.1,
+    "vin": 0.753,
+    "vout": 0.279
+  },
+  {
+    "freq": 12263.0,
+    "gain_db": -8.74,
+    "phase_deg": -39.6,
+    "vin": 0.74,
+    "vout": 0.271
+  },
+  {
+    "freq": 13384.0,
+    "gain_db": -8.87,
+    "phase_deg": -44.5,
+    "vin": 0.744,
+    "vout": 0.268
+  },
+  {
+    "freq": 14607.0,
+    "gain_db": -9.07,
+    "phase_deg": -50.1,
+    "vin": 0.745,
+    "vout": 0.262
+  },
+  {
+    "freq": 15942.0,
+    "gain_db": -9.37,
+    "phase_deg": -56.3,
+    "vin": 0.733,
+    "vout": 0.249
+  },
+  {
+    "freq": 17398.0,
+    "gain_db": -9.78,
+    "phase_deg": -63.2,
+    "vin": 0.738,
+    "vout": 0.239
+  },
+  {
+    "freq": 18988.0,
+    "gain_db": -10.37,
+    "phase_deg": -70.1,
+    "vin": 0.738,
+    "vout": 0.224
+  },
+  {
+    "freq": 20723.0,
+    "gain_db": -11.18,
+    "phase_deg": -77.2,
+    "vin": 0.748,
+    "vout": 0.206
+  },
+  {
+    "freq": 22617.0,
+    "gain_db": -12.38,
+    "phase_deg": -83.7,
+    "vin": 0.721,
+    "vout": 0.173
+  },
+  {
+    "freq": 24683.0,
+    "gain_db": -13.92,
+    "phase_deg": -89.2,
+    "vin": 0.753,
+    "vout": 0.152
+  },
+  {
+    "freq": 26939.0,
+    "gain_db": -15.71,
+    "phase_deg": -93.4,
+    "vin": 0.73,
+    "vout": 0.12
+  },
+  {
+    "freq": 29400.0,
+    "gain_db": -17.79,
+    "phase_deg": -96.3,
+    "vin": 0.719,
+    "vout": 0.093
+  },
+  {
+    "freq": 32087.0,
+    "gain_db": -19.98,
+    "phase_deg": -96.4,
+    "vin": 0.716,
+    "vout": 0.072
+  },
+  {
+    "freq": 35019.0,
+    "gain_db": -22.42,
+    "phase_deg": -93.8,
+    "vin": 0.717,
+    "vout": 0.054
+  },
+  {
+    "freq": 38219.0,
+    "gain_db": -24.93,
+    "phase_deg": -86.7,
+    "vin": 0.704,
+    "vout": 0.04
+  },
+  {
+    "freq": 41711.0,
+    "gain_db": -27.32,
+    "phase_deg": -73.7,
+    "vin": 0.745,
+    "vout": 0.032
+  },
+  {
+    "freq": 45523.0,
+    "gain_db": -28.76,
+    "phase_deg": -55.3,
+    "vin": 0.713,
+    "vout": 0.026
+  },
+  {
+    "freq": 49682.0,
+    "gain_db": -28.94,
+    "phase_deg": -35.9,
+    "vin": 0.707,
+    "vout": 0.025
+  },
+  {
+    "freq": 54222.0,
+    "gain_db": -28.22,
+    "phase_deg": -21.6,
+    "vin": 0.754,
+    "vout": 0.029
+  },
+  {
+    "freq": 59177.0,
+    "gain_db": -27.25,
+    "phase_deg": -11.9,
+    "vin": 0.723,
+    "vout": 0.031
+  },
+  {
+    "freq": 64584.0,
+    "gain_db": -26.32,
+    "phase_deg": -6.1,
+    "vin": 0.701,
+    "vout": 0.034
+  },
+  {
+    "freq": 70486.0,
+    "gain_db": -25.53,
+    "phase_deg": -2.0,
+    "vin": 0.739,
+    "vout": 0.039
+  },
+  {
+    "freq": 76927.0,
+    "gain_db": -24.98,
+    "phase_deg": 2.8,
+    "vin": 0.756,
+    "vout": 0.043
+  },
+  {
+    "freq": 83956.0,
+    "gain_db": -24.36,
+    "phase_deg": 2.7,
+    "vin": 0.749,
+    "vout": 0.045
+  },
+  {
+    "freq": 91627.0,
+    "gain_db": -23.93,
+    "phase_deg": 4.1,
+    "vin": 0.748,
+    "vout": 0.048
+  },
+  {
+    "freq": 100000.0,
+    "gain_db": -23.33,
+    "phase_deg": 8.6,
+    "vin": 0.694,
+    "vout": 0.047
+  }
+]

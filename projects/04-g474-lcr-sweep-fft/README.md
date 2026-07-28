@@ -91,19 +91,22 @@ projects/04-g474-lcr-sweep-fft/
 ├── CubeMX配置指南.md                ← 一步一步配置截图
 ├── Core/
 │   ├── Inc/
-│   │   ├── ad9833.h               ← DDS 驱动 (从 03 项目复制)
-│   │   ├── adc_fft.h              ← ADC 双通道 + FFT (改自 02 项目)
-│   │   ├── lcd.h                  ← TFT LCD 驱动 (新建)
-│   │   └── lcr_sweep.h            ← 扫频主控 (新建)
+│   │   ├── ad9833.h               ← DDS 驱动
+│   │   ├── adc_dual.h             ← ADC 双通道 + FFT
+│   │   ├── mcp41010.h             ← MCP41010 数字电位器
+│   │   ├── st7789.h               ← TFT LCD 驱动 (ST7789VW)
+│   │   └── bode_plot.h            ← Bode 幅频曲线绘制
 │   └── Src/
 │       ├── ad9833.c
-│       ├── adc_fft.c
-│       ├── lcd.c
-│       └── lcr_sweep.c
+│       ├── adc_dual.c
+│       ├── mcp41010.c
+│       ├── st7789.c
+│       ├── bode_plot.c
+│       └── main-sweep-reference.c  ← main.c 集成参考代码
 ├── docs/
 │   ├── ST7789屏幕参考资料.md        ← 屏幕芯片手册提炼
 │   └── LCR网络基础.md              ← LCR 基本概念
-└── screenshots/                    ← CubeMX 配置截图
+└── sweep_data_parsed.json          ← 最新扫频数据 (80点)
 ```
 
 ## 实施步骤
@@ -111,12 +114,12 @@ projects/04-g474-lcr-sweep-fft/
 | 步骤 | 内容 | 状态 |
 |------|------|------|
 | 1 | 确认硬件 + 整理参考资料 | ✅ |
-| 2 | CubeMX 新建工程 + 外设配置 | 🔲 |
-| 3 | AD9833 驱动移植 + 基本输出验证 | 🔲 |
-| 4 | TFT LCD 驱动编写 + 显示验证 | 🔲 |
-| 5 | ADC 双通道 DMA 采集 + FFT 验证 | 🔲 |
-| 6 | 扫频逻辑 + 数据存储 | 🔲 |
-| 7 | 屏幕绘制坐标系 + Bode 曲线 | 🔲 |
+| 2 | CubeMX 新建工程 + 外设配置 | ✅ |
+| 3 | AD9833 驱动移植 + 基本输出验证 | ✅ |
+| 4 | TFT LCD 驱动编写 + Bode 图绘制 | ✅ (待烧录验证) |
+| 5 | ADC 双通道 DMA 采集 + FFT 验证 | ✅ |
+| 6 | 扫频逻辑 + 数据存储 | ✅ |
+| 7 | 屏幕绘制坐标系 + Bode 曲线 | ✅ |
 | 8 | 完整联调 | 🔲 |
 
 ## 扫频参数 (初步)

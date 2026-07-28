@@ -1,19 +1,24 @@
 /**
- * main.c 集成参考 — 第5步: DDS扫频 + ADC双通道采集 + FFT分析
+ * main.c 集成参考 — 第6步: DDS扫频 + ADC双通道采集 + FFT分析 + TFT Bode 图
  *
  * 用法: 把对应代码块复制到 CubeIDE 生成的 main.c 的对应 USER CODE 区域
  * 需要的文件已放入工程:
- *   Core/Inc/ad9833.h    Core/Src/ad9833.c
- *   Core/Inc/adc_dual.h   Core/Src/adc_dual.c
+ *   Core/Inc/ad9833.h     Core/Src/ad9833.c
+ *   Core/Inc/adc_dual.h    Core/Src/adc_dual.c
+ *   Core/Inc/mcp41010.h   Core/Src/mcp41010.c
+ *   Core/Inc/st7789.h      Core/Src/st7789.c
+ *   Core/Inc/bode_plot.h   Core/Src/bode_plot.c
  *
  * 接线:
- *   AD9833 VOUT ─┬── 低通滤波器输入
- *                └── PA0 (ADC1_IN1, 输入参考)
- *   低通滤波器输出 ── PA1 (ADC1_IN2, 输出响应)
+ *   AD9833 PGA输出 ─┬── 低通滤波器输入 (VOUTB1)
+ *                    └── PA0 (ADC1_IN1, 输入参考 CH1)
+ *   低通滤波器输出 (VOUTB2) ── PA1 (ADC1_IN2, 输出响应 CH2)
  *   AD9833 GND ── 滤波器 GND ── STM32 GND (共地!)
  *
  * 串口输出格式 (每个频点一行, 方便复制到 Excel 画图):
- *   Freq, Gain_dB, Phase_deg, Vin, Vout
+ *   Freq, Gain_dB, Phase_deg, V_in, V_out
+ *
+ * TFT 输出: 扫频完成后自动绘制 Bode 幅频曲线
  */
 
 /* ============================================================
@@ -22,8 +27,11 @@
 #include "ad9833.h"
 #include "adc_dual.h"
 #include "mcp41010.h"
+#include "st7789.h"
+#include "bode_plot.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 /* ============================================================
  * ② USER CODE BEGIN PV — 全局变量 (Private Variables)
@@ -52,11 +60,56 @@ void uart_print(const char *str)
     HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 1000);
 }
 
+/*
+ * find_cutoff — 从扫频数据里找 -3dB 截止频率
+ *
+ * 归一化后通带 = 0dB, 找到第一个低于 -3dB 的频点
+ * 扫描方向: 低→高, 找高频侧截止
+ */
+static float find_cutoff(float *freqs, float *gains, int n)
+{
+    /* 从 1kHz 往后扫描 (跳过低频交流耦合区) */
+    int start = 0;
+    for (int i = 0; i < n; i++) {
+        if (freqs[i] >= 1000.0f) { start = i; break; }
+    }
+
+    for (int i = start; i < n; i++)
+    {
+        if (gains[i] <= -3.0f)
+        {
+            /* 线性插值: 在 i-1 和 i 之间找 -3dB 精确频率 */
+            if (i > start)
+            {
+                float g0 = gains[i - 1];
+                float g1 = gains[i];
+                if (g0 > -3.0f && g1 < -3.0f)
+                {
+                    float t = (-3.0f - g0) / (g1 - g0);
+                    return freqs[i - 1] + t * (freqs[i] - freqs[i - 1]);
+                }
+            }
+            return freqs[i];
+        }
+    }
+    return 0.0f;  /* 未找到 */
+}
+
 /* ============================================================
  * ④ USER CODE BEGIN 2 — main() 初始化区, 外设初始化之后
  * ============================================================ */
 
   uart_print("=== LCR Sweep Analyzer ===\r\n");
+
+  /* ── 初始化 ST7789 TFT 屏幕 ── */
+  ST7789_Init();
+  uart_print("TFT LCD OK\r\n");
+
+  /* 显示启动画面 */
+  ST7789_DrawString(10, 100, "LCR Sweep", PLOT_TEXT, PLOT_BG);
+  ST7789_DrawString(10, 116, "Analyzer", PLOT_TEXT, PLOT_BG);
+  ST7789_DrawString(10, 140, "Starting...", PLOT_CYAN, PLOT_BG);
+  HAL_Delay(500);
 
   /* ── 初始化 MCP41010 数字电位器 (增益 255=最大) ── */
   MCP41010_Init();
@@ -64,12 +117,13 @@ void uart_print(const char *str)
 
   /* ── 初始化 AD9833 (默认 1kHz 正弦) ── */
   AD9833_Init();
-  snprintf(uart_buf, sizeof(uart_buf),
-           "AD9833 OK, Fs=%.0f Hz\r\n", ADC_Dual_GetSampleRate());
+  uart_print("AD9833 OK\r\n");
 
   /* ── 初始化 ADC 双通道采集 ── */
   ADC_Dual_Init();
-  uart_print("ADC Dual started, waiting for first buffer...\r\n");
+  snprintf(uart_buf, sizeof(uart_buf),
+           "ADC Dual started, Fs=%.0f Hz\r\n", ADC_Dual_GetSampleRate());
+  uart_print(uart_buf);
 
   /* ── 扫频 + 测量 ── */
   uart_print("Freq, Gain_dB, Phase_deg, V_in, V_out\r\n");
@@ -128,10 +182,32 @@ void uart_print(const char *str)
 
   uart_print("--- Sweep Complete ---\r\n");
 
+  /* ── 归一化增益 + 绘制 Bode 图 ── */
+  {
+      /* 在通带内 (1k~12kHz) 找最大增益做归一化偏移 */
+      float offset = BodePlot_Normalize(sweep_gain_db, sweep_idx, 0);
+
+      /* 归一化后的增益数组 */
+      float gains_norm[SWEEP_POINTS];
+      for (int i = 0; i < sweep_idx; i++)
+          gains_norm[i] = sweep_gain_db[i] + offset;
+
+      /* 找 -3dB 截止频率 */
+      float fc = find_cutoff(sweep_freq, gains_norm, sweep_idx);
+
+      /* 串口输出关键参数 */
+      snprintf(uart_buf, sizeof(uart_buf),
+               "Passband offset: %.1f dB, fc=%.0f Hz\r\n", offset, fc);
+      uart_print(uart_buf);
+
+      /* 绘制 Bode 图到 TFT */
+      BodePlot_Draw(sweep_freq, gains_norm, sweep_idx, fc);
+      uart_print("Bode plot drawn on TFT\r\n");
+  }
+
 /* ============================================================
  * ⑤ USER CODE BEGIN 3 — while(1) 主循环
  * ============================================================ */
 
-  /* 扫频完成后闲着, 串口输出提示 */
-  uart_print("Scan done. Data ready for TFT plotting.\r\n");
+  /* 扫频完成, Bode 图已显示在屏幕上, 闲等 */
   HAL_Delay(5000);
