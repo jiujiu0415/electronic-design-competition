@@ -108,7 +108,7 @@ static float find_cutoff(float *freqs, float *gains, int n)
   /* 显示启动画面 */
   ST7789_DrawString(10, 100, "LCR Sweep", PLOT_TEXT, PLOT_BG);
   ST7789_DrawString(10, 116, "Analyzer", PLOT_TEXT, PLOT_BG);
-  ST7789_DrawString(10, 140, "Starting...", PLOT_CYAN, PLOT_BG);
+  ST7789_DrawString(10, 140, "Starting...", PLOT_TITLE, PLOT_BG);
   HAL_Delay(500);
 
   /* ── 初始化 MCP41010 数字电位器 (增益 255=最大) ── */

@@ -97,7 +97,7 @@ static void draw_axes_and_grid(void)
         /* 网格线 (decade 线用实线, 其他用暗线) */
         int is_decade = (f == 100.0f || f == 1000.0f ||
                          f == 10000.0f || f == 100000.0f);
-        uint16_t grid_color = is_decade ? PLOT_GRID : COLOR_DARKGRAY;
+        uint16_t grid_color = is_decade ? PLOT_GRID : COLOR_BLACK;
         ST7789_DrawVLine(x, PLOT_Y1, PLOT_H, grid_color);
 
         /* X 轴标签: 居中, 在绘图区下方 */
