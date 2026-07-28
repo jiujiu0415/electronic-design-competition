@@ -398,8 +398,8 @@ void ST7789_DrawVLine(uint16_t x, uint16_t y, uint16_t len, uint16_t color)
 void ST7789_DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
                      uint16_t color)
 {
-    int16_t dx = (x1 > x0) ? (int16_t)(x1 - x0) : -(int16_t)(x0 - x1);
-    int16_t dy = (y1 > y0) ? (int16_t)(y1 - y0) : -(int16_t)(y0 - y1);
+    int16_t dx = (x1 > x0) ? (int16_t)(x1 - x0) : (int16_t)(x0 - x1);
+    int16_t dy = (y1 > y0) ? (int16_t)(y1 - y0) : (int16_t)(y0 - y1);
     int16_t sx = (x0 < x1) ? 1 : -1;
     int16_t sy = (y0 < y1) ? 1 : -1;
     int16_t err = dx - dy;
