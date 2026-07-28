@@ -118,8 +118,14 @@ Pinout & Configuration → Connectivity → SPI2:
 |------|------|----------|
 | SPI2_SCK | **PB13** | TFT SC (时钟) |
 | SPI2_MOSI | **PB15** | TFT ADS (数据) |
+| GPIO_OUT | **PB0** | TFT CD (命令/数据) |
+| GPIO_OUT | **PB1** | TFT LCS (片选) |
+| GPIO_OUT | **PA8** | TFT TSR (复位) |
+| — | **3.3V** | TFT **BL** (背光) — 常亮接法，不经过 STM32 引脚 |
+| — | GND | TFT GND |
 
-> ⚠️ Transmit Only 模式下没有 MISO 引脚，TFT 的 SDO(ODS) 不接
+> ⚠️ Transmit Only 模式下没有 MISO 引脚，TFT 的 ODS(SDO) 不接
+> ⚠️ BL 背光直接接 3.3V 常亮。2.4" 模块板载限流电阻，不需外加。如需 PWM 调光，后续可改接到 PA9(TIM1_CH2) 等空闲 PWM 引脚
 
 ### 4.3 参数设置
 

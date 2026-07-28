@@ -55,6 +55,7 @@
 | PB1 | GPIO OUT | TFT LCS (片选) |
 | PB0 | GPIO OUT | TFT CD (命令/数据) |
 | PA8 | GPIO OUT | TFT TSR (复位) |
+| — | 3.3V | TFT BL (背光常亮) |
 | — | — | TFT A (背光) → 3.3V 或 PWM |
 | **ADC1 双通道** | | |
 | PA0 | ADC1_IN1 | LCR 输入参考信号 |
