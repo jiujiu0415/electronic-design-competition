@@ -11,6 +11,13 @@
 #include "bode_plot.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
+
+/* 调试用 — 串口打印 */
+#include "main.h"
+extern UART_HandleTypeDef huart2;
+#define DBG_PRINT(msg) \
+    HAL_UART_Transmit(&huart2, (uint8_t *)(msg), strlen(msg), 1000)
 
 /* 绘图区域尺寸 */
 #define PLOT_W  (PLOT_X2 - PLOT_X1)   /* 268 */
@@ -182,8 +189,12 @@ void BodePlot_Draw(const float *freqs, const float *gains_db,
     char buf[32];
     uint16_t y;
 
+    DBG_PRINT("[Bode] 1/6 FillScreen...\r\n");
+
     /* ── ① 清屏 ── */
     ST7789_FillScreen(PLOT_BG);
+
+    DBG_PRINT("[Bode] 2/6 Title...\r\n");
 
     /* ── ② 标题行 ── */
     ST7789_DrawString(2, 0, "Bode Plot", PLOT_TITLE, PLOT_BG);
@@ -198,11 +209,17 @@ void BodePlot_Draw(const float *freqs, const float *gains_db,
         ST7789_DrawString(80, 0, buf, PLOT_TEXT, PLOT_BG);
     }
 
+    DBG_PRINT("[Bode] 3/6 Grid...\r\n");
+
     /* ── ③ 轴 + 网格 ── */
     draw_axes_and_grid();
 
+    DBG_PRINT("[Bode] 4/6 Curve...\r\n");
+
     /* ── ④ 绘制曲线 ── */
     BodePlot_DrawCurve(freqs, gains_db, n, PLOT_CURVE);
+
+    DBG_PRINT("[Bode] 5/6 -3dB marker...\r\n");
 
     /* ── ⑤ -3dB 标记线 ── */
     y = gain_to_y(-3.0f);
@@ -210,9 +227,13 @@ void BodePlot_Draw(const float *freqs, const float *gains_db,
     ST7789_DrawString(PLOT_X1 + 4, y - 7, "-3dB",
                       PLOT_MARKER_3DB, PLOT_BG);
 
+    DBG_PRINT("[Bode] 6/6 Status bar...\r\n");
+
     /* ── ⑥ 底部状态栏 ── */
     ST7789_DrawHLine(0, ST7789_HEIGHT - 12, ST7789_WIDTH, PLOT_GRID);
     snprintf(buf, sizeof(buf), "Sweep:%dpts %.0f-%.0fkHz",
              n, freqs[0] / 1000.0f, freqs[n - 1] / 1000.0f);
     ST7789_DrawString(2, ST7789_HEIGHT - 10, buf, PLOT_TEXT, PLOT_BG);
+
+    DBG_PRINT("[Bode] Done!\r\n");
 }
