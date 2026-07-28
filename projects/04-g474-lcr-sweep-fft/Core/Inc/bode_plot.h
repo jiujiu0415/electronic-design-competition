@@ -70,11 +70,13 @@ void BodePlot_DrawCurve(const float *freqs, const float *gains_db,
 /*
  * BodePlot_Normalize — 归一化增益: 自动检测通带最大增益并平移
  *
+ * @param freqs     频率数组 (Hz), 用于定位通带范围
  * @param gains_db  原始增益数组
  * @param n         数据点数
  * @param skip_low  跳过前 skip_low 个点 (低频交流耦合区)
  * @return          归一化偏移量 (加到原始值 = 归一化值)
  */
-float BodePlot_Normalize(const float *gains_db, uint16_t n, uint16_t skip_low);
+float BodePlot_Normalize(const float *freqs, const float *gains_db,
+                         uint16_t n, uint16_t skip_low);
 
 #endif /* __BODE_PLOT_H */

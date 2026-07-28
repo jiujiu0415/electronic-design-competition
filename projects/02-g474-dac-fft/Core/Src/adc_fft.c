@@ -68,35 +68,137 @@ static float zero_cross_freq(uint16_t *buf, uint16_t len, float dc)
 }
 
 /* ============================================================
- * 波形类型识别 (基于谐波比值)
+ * classify_group — 根据谐波比值判断一组峰的波形类型
  * ============================================================ */
-static void classify_waveform(FFT_Result *r)
+static void classify_group(FFT_Result *r, uint8_t *group_id,
+                           uint8_t gid, float fund_amp,
+                           char *out_waveform)
 {
-    if (r->peak_count < 1) { str_copy(r->waveform, "NONE"); return; }
-
-    float fund = r->peaks[0].amplitude;
-    float f0   = r->peaks[0].freq_hz;
     float h2 = 0.0f, h3 = 0.0f, h5 = 0.0f;
-    float ratio;
 
     for (uint8_t i = 0; i < r->peak_count; i++)
     {
-        ratio = r->peaks[i].freq_hz / f0;
-        if      (ratio > 1.90f && ratio < 2.10f) h2 = r->peaks[i].amplitude;
-        else if (ratio > 2.90f && ratio < 3.10f) h3 = r->peaks[i].amplitude;
-        else if (ratio > 4.90f && ratio < 5.10f) h5 = r->peaks[i].amplitude;
+        if (group_id[i] != gid) continue;
+        uint8_t h = r->peaks[i].harmonic;
+        if      (h == 2) h2 = r->peaks[i].amplitude;
+        else if (h == 3) h3 = r->peaks[i].amplitude;
+        else if (h == 5) h5 = r->peaks[i].amplitude;
     }
 
-    float r2 = (fund > 0.001f) ? h2 / fund : 0.0f;
-    float r3 = (fund > 0.001f) ? h3 / fund : 0.0f;
-    float r5 = (fund > 0.001f) ? h5 / fund : 0.0f;
+    float r2 = (fund_amp > 0.001f) ? h2 / fund_amp : 0.0f;
+    float r3 = (fund_amp > 0.001f) ? h3 / fund_amp : 0.0f;
+    float r5 = (fund_amp > 0.001f) ? h5 / fund_amp : 0.0f;
     float th = r2 + r3 + r5;
 
-    if      (th < 0.06f)                              str_copy(r->waveform, "SINE");
-    else if (r2 < 0.08f && r3 > 0.05f && r3 > r5*2)  str_copy(r->waveform, "TRIANGLE");
-    else if (r2 < 0.10f && r3 > 0.20f && r5 > 0.10f) str_copy(r->waveform, "SQUARE");
-    else if (r2 > 0.30f)                              str_copy(r->waveform, "SAWTOOTH");
-    else                                              str_copy(r->waveform, "COMPOSITE");
+    if      (th < 0.06f)                              str_copy(out_waveform, "SINE");
+    else if (r3 < 0.05f && r5 < 0.05f)                str_copy(out_waveform, "SINE");   /* 失真正弦: 有谐波但无奇次谐波(3/5次) */
+    else if (r2 < 0.08f && r3 > 0.05f && r3 > r5*2)  str_copy(out_waveform, "TRIANGLE");
+    else if (r2 < 0.10f && r3 > 0.20f && r5 > 0.10f) str_copy(out_waveform, "SQUARE");
+    else if (r2 > 0.30f)                              str_copy(out_waveform, "SAWTOOTH");
+    else                                              str_copy(out_waveform, "COMPOSITE");
+}
+
+/* ============================================================
+ * classify_peaks — 谐波分组 + 每组独立识别波形
+ *
+ * 原理: 单根谱线看不出波形类型, 必须看谐波关系。
+ *   - 先把所有峰按"谁是谁的谐波"分组 (低频→高频扫描)
+ *   - 每组独立用谐波幅值比值判断波形 (和旧的 classify_waveform 规则一样)
+ *   - 每个峰得到独立的 waveform 标签 + 谐波次数
+ *   - 多于1组 → 整体判定 COMPOSITE (混合信号)
+ *
+ * 无法处理的情况 (FFT 物理极限):
+ *   两个信号恰好在同一频率/谐波频率重叠 → 能量混在一起, 无法拆分
+ * ============================================================ */
+static void classify_peaks(FFT_Result *r)
+{
+    uint8_t i, g;
+
+    if (r->peak_count < 1)
+    {
+        str_copy(r->waveform, "NONE");
+        return;
+    }
+
+    /* 先按频率升序排 (谐波分组依赖频率顺序) */
+    for (i = 0; i < r->peak_count; i++)
+    {
+        for (uint8_t j = i + 1; j < r->peak_count; j++)
+        {
+            if (r->peaks[j].freq_hz < r->peaks[i].freq_hz)
+            {
+                FFT_Peak tmp = r->peaks[i];
+                r->peaks[i]  = r->peaks[j];
+                r->peaks[j]  = tmp;
+            }
+        }
+    }
+
+    /* ── 步骤A: 给峰分配谐波分组 (低频→高频) ── */
+    uint8_t group_id[MAX_PEAKS];
+    float   group_f0[MAX_PEAKS];
+    uint8_t num_groups = 0;
+
+    for (i = 0; i < r->peak_count; i++)
+        group_id[i] = 0;
+
+    for (i = 0; i < r->peak_count; i++)
+    {
+        /* 先检查: 当前峰是不是某个已有分组的谐波? */
+        uint8_t assigned = 0;
+        for (g = 0; g < num_groups; g++)
+        {
+            float ratio = r->peaks[i].freq_hz / group_f0[g];
+            int   near  = (int)(ratio + 0.5f);
+            if (near < 2 || near > 10) continue;
+            float err   = ABS_F(ratio - (float)near);
+            if (err < 0.05f)
+            {
+                group_id[i] = g + 1;
+                r->peaks[i].harmonic = (uint8_t)near;
+                assigned = 1;
+                break;
+            }
+        }
+        if (assigned) continue;
+
+        /* 不是任何已有组的谐波 → 新建分组, 这个峰就是基波 */
+        num_groups++;
+        group_id[i] = num_groups;
+        group_f0[num_groups - 1] = r->peaks[i].freq_hz;
+        r->peaks[i].harmonic = 1;
+    }
+
+    /* ── 步骤B: 每组独立分类 ── */
+    for (g = 0; g < num_groups; g++)
+    {
+        /* 找这个组里基波的幅度 */
+        float fund_amp = 0.0f;
+        for (i = 0; i < r->peak_count; i++)
+        {
+            if (group_id[i] == g + 1 && r->peaks[i].harmonic == 1)
+            {
+                fund_amp = r->peaks[i].amplitude;
+                break;
+            }
+        }
+
+        char grp_wave[16];
+        classify_group(r, group_id, g + 1, fund_amp, grp_wave);
+
+        /* 同组所有峰打上相同的波形标签 */
+        for (i = 0; i < r->peak_count; i++)
+        {
+            if (group_id[i] == g + 1)
+                str_copy(r->peaks[i].waveform, grp_wave);
+        }
+    }
+
+    /* ── 步骤C: 整体判定 ── */
+    if (num_groups > 1)
+        str_copy(r->waveform, "COMPOSITE");
+    else
+        str_copy(r->waveform, r->peaks[0].waveform);
 }
 
 /* ============================================================
@@ -177,7 +279,11 @@ FFT_Result ADC_FFT_Analyze(void)
     for (uint16_t i = 1; i < FFT_SIZE / 2; i++)
         if (fft_mag[i] > max_mag) max_mag = fft_mag[i];
 
-    float threshold = max_mag * 0.02f;
+    /* 阈值 = 最大峰值的 5%
+       选 5% 而非更低, 是为了过滤 FFT 噪声地板的随机波动。
+       纯正弦波的真实谐波 < 1%, 低于阈值不会被误抓。
+       三角波 3 次谐波 ~11%、方波 ~33%, 5% 阈值能正确捕获。 */
+    float threshold = max_mag * 0.05f;
     result.peak_count = 0;
 
     for (uint16_t k = 1; k < FFT_SIZE / 2 - 1 && result.peak_count < MAX_PEAKS; k++)
@@ -205,8 +311,22 @@ FFT_Result ADC_FFT_Analyze(void)
         result.peak_count++;
     }
 
-    /* ── 7. 波形识别 ── */
-    classify_waveform(&result);
+    /* ── 7. 谐波分组 + 波形识别 (内部先按频率排序再做分组) ── */
+    classify_peaks(&result);
+
+    /* 按幅度降序排列 (显示用, peak_count ≤ 8) */
+    for (uint8_t i = 0; i < result.peak_count; i++)
+    {
+        for (uint8_t j = i + 1; j < result.peak_count; j++)
+        {
+            if (result.peaks[j].amplitude > result.peaks[i].amplitude)
+            {
+                FFT_Peak tmp = result.peaks[i];
+                result.peaks[i] = result.peaks[j];
+                result.peaks[j] = tmp;
+            }
+        }
+    }
 
     /* ── 8. 重启 ── */
     data_ready = 0;

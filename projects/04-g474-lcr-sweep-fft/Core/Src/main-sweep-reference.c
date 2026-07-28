@@ -185,7 +185,7 @@ static float find_cutoff(float *freqs, float *gains, int n)
   /* ── 归一化增益 + 绘制 Bode 图 ── */
   {
       /* 在通带内 (1k~12kHz) 找最大增益做归一化偏移 */
-      float offset = BodePlot_Normalize(sweep_gain_db, sweep_idx, 0);
+      float offset = BodePlot_Normalize(sweep_freq, sweep_gain_db, sweep_idx, 0);
 
       /* 归一化后的增益数组 */
       float gains_norm[SWEEP_POINTS];

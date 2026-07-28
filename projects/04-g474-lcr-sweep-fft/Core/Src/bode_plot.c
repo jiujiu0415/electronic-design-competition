@@ -114,7 +114,7 @@ static void draw_axes_and_grid(void)
     }
 
     /* ── Y 轴标签 "dB" (左上角) ── */
-    ST7789_DrawString(PLOT_X1 + 2, PLOT_Y1 + 2, "dB", PLOT_CYAN, PLOT_BG);
+    ST7789_DrawString(PLOT_X1 + 2, PLOT_Y1 + 2, "dB", PLOT_TITLE, PLOT_BG);
 }
 
 /* ================================================================
@@ -141,8 +141,8 @@ void BodePlot_DrawCurve(const float *freqs, const float *gains_db,
  * 归一化
  * ================================================================ */
 
-float BodePlot_Normalize(const float *gains_db, uint16_t n,
-                         uint16_t skip_low)
+float BodePlot_Normalize(const float *freqs, const float *gains_db,
+                         uint16_t n, uint16_t skip_low)
 {
     if (skip_low >= n) skip_low = 0;
 

@@ -18,9 +18,11 @@
  * 数据结构
  * ============================================================ */
 typedef struct {
-    float freq_hz;
-    float amplitude;
-    float phase_deg;
+    float   freq_hz;
+    float   amplitude;
+    float   phase_deg;
+    uint8_t harmonic;       /* 谐波次数: 1=基波, 2=二次… 0=未分类 */
+    char    waveform[16];   /* 该峰所属分组的波形类型 */
 } FFT_Peak;
 
 typedef struct {

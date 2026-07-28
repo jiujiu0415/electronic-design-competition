@@ -67,12 +67,13 @@ void uart_print(char *msg)
                r.peaks[0].amplitude, r.waveform);
       uart_print(tx_buf);
 
-      /* 打印所有检测到的峰 */
+      /* 打印所有峰: 频率 / 幅值 / 谐波次数 / 波形类型 */
       for (uint8_t i = 0; i < r.peak_count; i++)
       {
           snprintf(tx_buf, sizeof(tx_buf),
-                   "  Peak%d: %.1f Hz  amp=%.3f\r\n",
-                   i + 1, r.peaks[i].freq_hz, r.peaks[i].amplitude);
+                   "  Peak%d: %6.1f Hz  amp=%.3f  harm=%d  %s\r\n",
+                   i + 1, r.peaks[i].freq_hz, r.peaks[i].amplitude,
+                   r.peaks[i].harmonic, r.peaks[i].waveform);
           uart_print(tx_buf);
       }
       uart_print("---\r\n");
