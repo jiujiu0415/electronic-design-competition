@@ -143,10 +143,9 @@ ADC1 → **DMA Settings** 标签 → **Add**:
 ### 5.1 引脚模式
 
 Pinout & Configuration → Analog → **ADC2**:
-- 左侧通道列表 → 找到 **IN1 (PA1)** → 改为 **IN1 Single-ended**
+- 左侧通道列表 → 找到 **IN2 (PA1)** → 改为 **IN2 Single-ended**
 
-> PA1 在 G474 上既可作为 ADC1_IN2 也可作为 ADC2_IN1。
-> 这里选 **ADC2_IN1**，使两个 ADC 独立并行工作。
+> PA1 在 G474 上只能设为 ADC2_IN2，不能设为 ADC2_IN1。
 
 ### 5.2 ADC2 参数设置
 
@@ -175,7 +174,7 @@ Number Of Conversion = **1**:
 
 | Rank | Channel | Sampling Time |
 |------|---------|---------------|
-| Rank 1 | **Channel 1 (PA1)** | **2.5 cycles** |
+| Rank 1 | **Channel 2 (PA1)** | **2.5 cycles** |
 
 ### 5.5 ADC2 DMA Settings
 
@@ -337,7 +336,7 @@ Ctrl+B 编译 → 0 Error → DSP 库就绪。
 | Pin | Signal | Function |
 |-----|--------|----------|
 | PA0 | ADC1_IN1 | 信号输入（经 AGC + 偏置，0~3.2V） |
-| PA1 | ADC2_IN1 | 检波器输出（直流，= 总信号 Vpp） |
+| PA1 | ADC2_IN2 | 检波器输出（直流，= 总信号 Vpp） |
 | PA2 | USART2_TX | 串口打印 |
 | PA13 | SYS_SWDIO | ST-LINK 调试 |
 | PA14 | SYS_SWCLK | ST-LINK 调试 |
