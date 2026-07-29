@@ -127,6 +127,7 @@ ADC1 → **DMA Settings** 标签 → **Add**:
 | 参数 | 值 |
 |------|-----|
 | DMA Request | **ADC1** |
+| Channel | **DMA1 Channel 1** (CubeMX 自动分配) |
 | Direction | **Peripheral To Memory** |
 | Mode | **Circular** |
 | Data Width (Peripheral) | **Half Word** |
@@ -183,6 +184,7 @@ ADC2 → **DMA Settings** 标签 → **Add**:
 | 参数 | 值 |
 |------|-----|
 | DMA Request | **ADC2** |
+| Channel | **DMA1 Channel 2** (CubeMX 自动分配) |
 | Direction | **Peripheral To Memory** |
 | Mode | **Circular** |
 | Data Width (Peripheral) | **Half Word** |
