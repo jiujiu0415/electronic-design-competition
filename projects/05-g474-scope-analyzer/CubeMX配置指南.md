@@ -193,7 +193,47 @@ Pinout & Configuration → System Core → **NVIC**:
 
 ---
 
-## ═══ 第8步：项目设置 ═══
+## ═══ 第8步：CMSIS-DSP 库启用 ⚠️ 必须！FFT 依赖！═══
+
+> ⚠️ 这是最容易漏掉的一步。不加 DSP 库 = FFT 代码编译报错，满屏 undefined reference。
+
+### 方法一：CubeMX 界面直接勾选（推荐）
+
+Pinout & Configuration → **Software Packs** → **Select Components**:
+- 找到 **CMSIS Pack** → 展开
+- 勾选 **CMSIS DSP Library**
+- CubeMX 会自动配置 include 路径和链接库
+
+如果 Software Packs 里找不到，用方法二。
+
+### 方法二：工程属性手动配置
+
+生成代码后，右键工程 → **Properties** → **C/C++ Build** → **Settings**:
+
+**① MCU GCC Compiler** → **Preprocessor** → Defined symbols:
+```
+添加: ARM_MATH_CM4
+```
+
+**② MCU GCC Compiler** → **Include paths**:
+```
+添加: ../Drivers/CMSIS/DSP/Include
+```
+
+**③ MCU GCC Linker** → **Libraries**:
+- Libraries (-l): 添加 `arm_cortexM4lf_math`
+- Library search path (-L): 添加 `../Drivers/CMSIS/DSP/Lib/GCC`
+
+### 验证
+
+```c
+#include "arm_math.h"   // Ctrl+Click 能跳转到头文件 = 成功
+```
+Ctrl+B 编译 → 0 Error → DSP 库就绪。
+
+---
+
+## ═══ 第9步：项目设置 ═══
 
 **Project Manager → Project**:
 | 参数 | 值 |
@@ -208,7 +248,7 @@ Pinout & Configuration → System Core → **NVIC**:
 
 ---
 
-## ═══ 第9步：保存 + 生成代码 ═══
+## ═══ 第10步：保存 + 生成代码 ═══
 
 1. **Ctrl+S** 保存 .ioc 文件
 2. ⚠️ 截图: Clock Configuration（时钟树）+ Pinout 视图
@@ -216,7 +256,7 @@ Pinout & Configuration → System Core → **NVIC**:
 
 ---
 
-## ═══ 第10步：生成后验证 ═══
+## ═══ 第11步：生成后验证 ═══
 
 | 检查项 | 怎么看 |
 |--------|--------|
@@ -238,13 +278,3 @@ Pinout & Configuration → System Core → **NVIC**:
 | PA13 | SYS_SWDIO | ST-LINK 调试 |
 | PA14 | SYS_SWCLK | ST-LINK 调试 |
 
----
-
-## ═══ CMSIS-DSP 库启用（生成代码后额外操作）═══
-
-1. 右键工程 → **Properties** → **C/C++ Build** → **Settings**
-2. **MCU GCC Linker** → **Libraries**:
-   - Libraries (-l): 添加 `arm_cortexM4lf_math`
-   - Library search path (-L): `${cubeide_dir}/../Middlewares/ST/ARM/DSP/Lib`
-3. **MCU GCC Compiler** → **Preprocessor** → Defined symbols: 添加 `ARM_MATH_CM4`
-4. Ctrl+B 编译 → `#include "arm_math.h"` 不报错 = 成功
