@@ -129,10 +129,12 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
  * @param signal_buf  ADC1 信号原始数据 (uint16_t[4096])
  * @param len         数据长度 (= 4096)
  * @param fs_hz       采样率 (Hz)
+ * @param agc_gain    AGC 线性增益, 1.0=无AGC/直连
  * @return            测量结果 (confidence 恒为 HIGH)
  */
 ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
-                                    uint16_t len, float fs_hz);
+                                    uint16_t len, float fs_hz,
+                                    float agc_gain);
 
 /**
  * ScopeFFT_Print — 串口打印测量结果

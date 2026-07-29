@@ -509,6 +509,20 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
                                       fund_phase,
                                       fs_hz, len);
 
+    /* ── ⑦a: AGC 增益补偿 — 所有幅度从 ADC 域转到原始输入域 ── */
+    float _G = result.agc_gain;
+    if (_G > 1.001f)
+    {
+        result.vpp             /= _G;
+        result.vrms            /= _G;
+        result.vpp_u_b         /= _G;
+        result.vrms_u_b        /= _G;
+        result.fundamental_amp /= _G;
+        for (uint8_t i = 0; i < result.harmonic_count; i++)
+            result.harmonics[i].amplitude /= _G;
+        result.interference_expected_amp /= _G;
+    }
+
     /* ═══════════════════════════════════════════
      * ⑧ 交叉验证 (层③) → 置信度
      * ═══════════════════════════════════════════ */
@@ -534,10 +548,9 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     }
 
     /* 校验 2: Vpp 交叉验证 (AGC 前域)
-       Vpp_u_b/G + 0.2V ≈ Vpp_envelope */
+       vpp_u_b + 0.2V ≈ vpp_envelope  [AGC补偿后 vpp_u_b 已是 pre-AGC] */
     {
-        float vpp_u_b_pre_agc = result.vpp_u_b / result.agc_gain;
-        float expected_total_pre = vpp_u_b_pre_agc + SCOPE_INTERFERENCE_VPP;
+        float expected_total_pre = result.vpp_u_b + SCOPE_INTERFERENCE_VPP;
         if (result.vpp_envelope > 0.001f)
         {
             float error = ABS_F(expected_total_pre - result.vpp_envelope)
@@ -591,7 +604,8 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
  * 不做: ADC2检波器, 干扰识别, Parseval, 波形重建, 交叉验证
  * ============================================================ */
 ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
-                                    uint16_t len, float fs_hz)
+                                    uint16_t len, float fs_hz,
+                                    float agc_gain)
 {
     ScopeResult result;
     memset(&result, 0, sizeof(result));
@@ -634,7 +648,7 @@ ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
 
     /* 无 ADC2 */
     result.vpp_envelope = 0.0f;
-    result.agc_gain = 1.0f;
+    result.agc_gain = agc_gain;
     result.interference_expected_amp = 0.0f;
     result.interference_peaks = 0;
 
@@ -760,6 +774,18 @@ ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
         }
     }
 
+    /* ── AGC 增益补偿 — ADC域 → 原始输入域 ── */
+    if (agc_gain > 1.001f)
+    {
+        result.vpp             /= agc_gain;
+        result.vrms            /= agc_gain;
+        result.vpp_u_b         /= agc_gain;
+        result.vrms_u_b        /= agc_gain;
+        result.fundamental_amp /= agc_gain;
+        for (uint8_t i = 0; i < result.harmonic_count; i++)
+            result.harmonics[i].amplitude /= agc_gain;
+    }
+
     /* 要求1/2: 无干扰, 高置信度 */
     result.confidence = SCOPE_CONFIDENCE_HIGH;
 
@@ -777,26 +803,26 @@ void ScopeFFT_Print(const ScopeResult *r)
 
     /* 时域原始 */
     snprintf(buf, sizeof(buf),
-             "Vdc=%.3fV  Vpp_total=%.3fV  Vrms_total=%.3fV\r\n",
-             r->vdc, r->vpp, r->vrms);
+             "Vdc=%.3fV  Vpp_total=%.1fmV  Vrms_total=%.1fmV\r\n",
+             r->vdc, r->vpp * 1000.0f, r->vrms * 1000.0f);
     HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
 
-    /* 频谱反推 */
+    /* 频谱反推 (原始输入域) */
     snprintf(buf, sizeof(buf),
-             "Vpp_u_b(recon)=%.3fV  Vrms_u_b(Parseval)=%.3fV\r\n",
-             r->vpp_u_b, r->vrms_u_b);
+             "Vpp_u_b(original)=%.1fmV  Vrms_u_b(original)=%.1fmV\r\n",
+             r->vpp_u_b * 1000.0f, r->vrms_u_b * 1000.0f);
     HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
 
     /* ADC2 检波器 + AGC */
     snprintf(buf, sizeof(buf),
-             "Vpp_envelope(ADC2)=%.3fV  AGC_Gain=%.2f\r\n",
-             r->vpp_envelope, r->agc_gain);
+             "Vpp_envelope(ADC2)=%.0fmV  AGC_Gain=%.2f\r\n",
+             r->vpp_envelope * 1000.0f, r->agc_gain);
     HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
 
     /* 基频 */
     snprintf(buf, sizeof(buf),
-             "Fundamental: %.0f Hz (%.3f Vpeak)  Res=%.1f Hz\r\n",
-             r->fundamental_freq, r->fundamental_amp,
+             "Fundamental: %.0f Hz (%.1f mVpeak)  Res=%.1f Hz\r\n",
+             r->fundamental_freq, r->fundamental_amp * 1000.0f,
              r->freq_resolution);
     HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
 
@@ -804,10 +830,10 @@ void ScopeFFT_Print(const ScopeResult *r)
     for (uint8_t i = 0; i < r->harmonic_count && i < SCOPE_MAX_HARM; i++)
     {
         snprintf(buf, sizeof(buf),
-                 "  Harmonic #%d: %.0f Hz (%.3f Vpeak, phi=%.2f rad)%s\r\n",
+                 "  Harmonic #%d: %.0f Hz (%.1f mVpeak, phi=%.2f rad)%s\r\n",
                  i + 2,
                  r->harmonics[i].freq_hz,
-                 r->harmonics[i].amplitude,
+                 r->harmonics[i].amplitude * 1000.0f,
                  r->harmonics[i].phase_rad,
                  r->harmonics[i].is_interference ? " [INTERFERENCE]" : "");
         HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
@@ -815,8 +841,8 @@ void ScopeFFT_Print(const ScopeResult *r)
 
     /* 干扰信息 */
     snprintf(buf, sizeof(buf),
-             "Interference: %.3f Vpeak expected, %d peaks detected\r\n",
-             r->interference_expected_amp, r->interference_peaks);
+             "Interference: %.0f mVpeak expected, %d peaks detected\r\n",
+             r->interference_expected_amp * 1000.0f, r->interference_peaks);
     HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
 
     /* 置信度 */

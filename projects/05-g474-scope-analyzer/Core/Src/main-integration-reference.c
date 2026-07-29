@@ -13,13 +13,13 @@
  *   两个 ADC 由 TIM2 TRGO 同步触发 @2.0 MSPS
  *
  * 串口输出格式 (每个测量周期一行):
- *   Vdc=1.650V  Vpp_total=1.024V  Vrms_total=0.362V
- *   Vpp_u_b(recon)=0.824V  Vrms_u_b(Parseval)=0.291V
- *   Vpp_envelope(ADC2)=0.310V  AGC_Gain=10.32
- *   Fundamental: 10500 Hz (0.512 Vpeak)
- *   Harmonic #3: 31500 Hz (0.128 Vpeak, phi=0.52 rad)
- *   Harmonic #4: 42000 Hz (0.064 Vpeak, phi=-1.23 rad)
- *   Interference: 1.032 Vpeak expected, 1 peaks detected
+ *   Vdc=1.650V  Vpp_total=1024.0mV  Vrms_total=362.0mV
+ *   Vpp_u_b(original)=824.0mV  Vrms_u_b(original)=291.0mV
+ *   Vpp_envelope(ADC2)=310mV  AGC_Gain=10.32
+ *   Fundamental: 10500 Hz (512.0 mVpeak)
+ *   Harmonic #3: 31500 Hz (128.0 mVpeak, phi=0.52 rad)
+ *   Harmonic #4: 42000 Hz (64.0 mVpeak, phi=-1.23 rad)
+ *   Interference: 1032 mVpeak expected, 1 peaks detected
  *   Confidence: HIGH
  */
 
@@ -98,7 +98,7 @@ static void uart_print(const char *str)
       if (!ScopeADC_Ready()) { ScopeADC_Restart(); HAL_Delay(500); continue; }
 
       uint16_t *sig = ScopeADC_GetSignalBuffer();
-      ScopeResult r = ScopeFFT_AnalyzeSimple(sig, 4096, ScopeADC_GetSampleRate());
+      ScopeResult r = ScopeFFT_AnalyzeSimple(sig, 4096, ScopeADC_GetSampleRate(), 1.0f);
       ScopeFFT_Print(&r);
       ScopeADC_Restart();
       HAL_Delay(1000);
