@@ -1,14 +1,21 @@
 /**
- * scope_adc.h — ADC 高速单通道采集 (STM32G474)
+ * scope_adc.h — 双 ADC 同步采集驱动
  *
- * 配置: ADC1, TIM2 触发 @2.0 MSPS, DMA Circular, 4096 点
- *       12-bit, PA0=IN1 Single-ended
+ * ADC1 (PA0): 信号输入 — 经 AGC + 1.6V 偏置, 0~3.2V 单极性
+ * ADC2 (PA1): 检波器输出 — 直流电压 = 加法器总信号 Vpp
+ *
+ * 两个 ADC 由 TIM2 TRGO 同步触发 @2.0 MSPS
+ * 各自由独立 DMA Circular 通道搬运 (ADC1→DMA1_CH1, ADC2→DMA1_CH2)
  *
  * 用法:
- *   ScopeADC_Init();           // 初始化
- *   while (!ScopeADC_Ready()); // 等 DMA 采集满
- *   uint16_t *buf = ScopeADC_GetBuffer();  // 拿到 4096 个点
- *   ScopeADC_Restart();        // 重启下一轮
+ *   ScopeADC_Init();
+ *   while (!ScopeADC_Ready());
+ *   uint16_t *signal   = ScopeADC_GetSignalBuffer();    // ADC1
+ *   uint16_t *envelope = ScopeADC_GetEnvelopeBuffer();  // ADC2
+ *   ... 分析 ...
+ *   ScopeADC_Restart();
+ *
+ * 依赖: STM32G4xx HAL (hadc1, hadc2, htim2, hdma_adc1, hdma_adc2)
  */
 
 #ifndef __SCOPE_ADC_H
@@ -17,41 +24,48 @@
 #include "stm32g4xx_hal.h"
 
 /* ============================================================
- * 参数
+ * 宏定义
  * ============================================================ */
 
-#define SCOPE_ADC_BUF_SIZE    4096      /* FFT 点数 */
-#define SCOPE_ADC_SAMPLE_RATE 2000000.0f /* 2.0 MSPS */
+#define SCOPE_ADC_SIGNAL_BUF_SIZE    4096     /* ADC1 信号缓冲 */
+#define SCOPE_ADC_ENVELOPE_BUF_SIZE  4096     /* ADC2 检波器缓冲 */
+#define SCOPE_ADC_SAMPLE_RATE        2000000.0f
 
 /* ============================================================
  * API
  * ============================================================ */
 
 /**
- * ScopeADC_Init — 启动 ADC + TIM2 + DMA
- * 调用后开始采集，数据持续写入内部缓冲区
+ * ScopeADC_Init — 初始化双 ADC 同步采集
+ * 校准 ADC1+ADC2, 启动 TIM2 触发, 启动两个 DMA
  */
 void ScopeADC_Init(void);
 
 /**
- * ScopeADC_Ready — 检查 DMA 是否采满一轮
- * @return 1=缓冲区已满可读取, 0=采集未完成
+ * ScopeADC_Ready — 双 ADC 是否均完成一轮采集
+ * @return 1 = 两个 ADC 都已采满 4096 点, 0 = 等待中
  */
 uint8_t ScopeADC_Ready(void);
 
 /**
- * ScopeADC_GetBuffer — 获取原始 ADC 数据指针
- * @return 4096 个 uint16_t (0~4095)
+ * ScopeADC_GetSignalBuffer — 获取 ADC1 信号缓冲区
+ * @return uint16_t[4096], 0~4095, 有效期为 Ready→Restart 之间
  */
-uint16_t* ScopeADC_GetBuffer(void);
+uint16_t* ScopeADC_GetSignalBuffer(void);
 
 /**
- * ScopeADC_Restart — 重启 DMA 准备下一轮采集
+ * ScopeADC_GetEnvelopeBuffer — 获取 ADC2 检波器缓冲区
+ * @return uint16_t[4096], 0~4095, 有效期为 Ready→Restart 之间
+ */
+uint16_t* ScopeADC_GetEnvelopeBuffer(void);
+
+/**
+ * ScopeADC_Restart — 重启双 ADC DMA, 准备下一轮采集
  */
 void ScopeADC_Restart(void);
 
 /**
- * ScopeADC_GetSampleRate — 返回当前采样率 (Hz)
+ * ScopeADC_GetSampleRate — 返回采样率 (Hz)
  */
 float ScopeADC_GetSampleRate(void);
 

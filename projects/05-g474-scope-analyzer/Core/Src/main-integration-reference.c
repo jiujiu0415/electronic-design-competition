@@ -1,17 +1,26 @@
 /**
- * main.c 集成参考 — 周期信号测量分析装置
+ * main.c 集成参考 — 周期信号测量分析装置 (双 ADC 版本)
  *
  * 用法: 把对应代码块复制到 CubeIDE 生成的 main.c 的对应 USER CODE 区域
  *
- * 需要的文件已放入工程:
+ * 需要的文件:
  *   Core/Inc/scope_adc.h    Core/Src/scope_adc.c
  *   Core/Inc/scope_fft.h    Core/Src/scope_fft.c
  *
+ * ADC 架构:
+ *   ADC1 (PA0): 信号输入 (经 AGC+偏置, 0~3.2V)
+ *   ADC2 (PA1): 检波器输出 (直流 = 总信号 Vpp)
+ *   两个 ADC 由 TIM2 TRGO 同步触发 @2.0 MSPS
+ *
  * 串口输出格式 (每个测量周期一行):
- *   Vdc=1.650V  Vpp=1.024V  Vrms=0.362V
+ *   Vdc=1.650V  Vpp_total=1.024V  Vrms_total=0.362V
+ *   Vpp_u_b(recon)=0.824V  Vrms_u_b(Parseval)=0.291V
+ *   Vpp_envelope(ADC2)=0.310V  AGC_Gain=10.32
  *   Fundamental: 10500 Hz (0.512 Vpeak)
- *   Harmonic #3: 31500 Hz (0.128 Vpeak)
- *   Harmonic #4: 42000 Hz (0.064 Vpeak)
+ *   Harmonic #3: 31500 Hz (0.128 Vpeak, phi=0.52 rad)
+ *   Harmonic #4: 42000 Hz (0.064 Vpeak, phi=-1.23 rad)
+ *   Interference: 1.032 Vpeak expected, 1 peaks detected
+ *   Confidence: HIGH
  */
 
 /* ============================================================
@@ -33,7 +42,6 @@ char uart_buf[256];
 
 /* ============================================================
  * ③ USER CODE BEGIN 0 — 自定义函数
- * ============================================================
  *
  * uart_print — 串口发字符串 (不依赖 printf)
  *
@@ -50,17 +58,18 @@ static void uart_print(const char *str)
 
   // ── 欢迎信息 ──
   uart_print("\r\n");
-  uart_print("=== Period Signal Analyzer (G474) ===\r\n");
+  uart_print("=== Period Signal Analyzer (G474, Dual-ADC) ===\r\n");
   uart_print("ADC: 2.0 MSPS, FFT: 4096 pt, Res: 488 Hz\r\n");
+  uart_print("ADC1(PA0)=Signal, ADC2(PA1)=Envelope Detector\r\n");
 
   // ── 初始化 FFT ──
   ScopeFFT_Init();
   uart_print("FFT initialized.\r\n");
 
-  // ── 启动 ADC 采集 ──
+  // ── 启动双 ADC 采集 ──
   ScopeADC_Init();
   snprintf(uart_buf, sizeof(uart_buf),
-           "ADC started @%.0f Hz, waiting for trigger...\r\n",
+           "Dual ADC started @%.0f Hz\r\n",
            ScopeADC_GetSampleRate());
   uart_print(uart_buf);
 
@@ -73,25 +82,42 @@ static void uart_print(const char *str)
 
   while (1)
   {
-      // ── 等待 DMA 采满 4096 点 ──
+      // ── 等待双 ADC DMA 采满 (100ms 超时保护) ──
       uart_print("\r\nWaiting...\r\n");
+      uint32_t timeout = HAL_GetTick();
       while (!ScopeADC_Ready())
       {
-          // 可以在这里做其他事, 或者单纯等待
+          if (HAL_GetTick() - timeout > 100)
+          {
+              uart_print("ERROR: ADC timeout!\r\n");
+              break;
+          }
       }
 
-      // ── 取出数据 + 分析 ──
-      uint16_t *buf = ScopeADC_GetBuffer();
-      ScopeResult r = ScopeFFT_Analyze(buf, SCOPE_ADC_BUF_SIZE,
-                                       ScopeADC_GetSampleRate());
+      if (!ScopeADC_Ready())
+      {
+          // 超时 → 重启并重试
+          ScopeADC_Restart();
+          HAL_Delay(500);
+          continue;
+      }
+
+      // ── 取出双 ADC 数据 ──
+      uint16_t *signal_buf   = ScopeADC_GetSignalBuffer();    // ADC1
+      uint16_t *envelope_buf = ScopeADC_GetEnvelopeBuffer();  // ADC2
+
+      // ── 完整分析 ──
+      ScopeResult r = ScopeFFT_Analyze(signal_buf, envelope_buf,
+                                        SCOPE_ADC_SIGNAL_BUF_SIZE,
+                                        ScopeADC_GetSampleRate());
 
       // ── 打印结果 ──
       ScopeFFT_Print(&r);
 
-      // ── 重启 DMA 准备下一轮 ──
+      // ── 重启 DMA, 准备下一轮 ──
       ScopeADC_Restart();
 
-      // ── 间隔一下 (可选) ──
+      // ── 间隔 (可选) ──
       HAL_Delay(1000);
   }
 
