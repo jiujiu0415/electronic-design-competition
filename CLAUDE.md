@@ -32,6 +32,8 @@ mcu:  芯片简写，如 f103 / g474 / mspm0g3507
 | 1 | `projects/01-f103-ad9833-signal-gen/` | STM32F103C8T6 | AD9833 信号源 | ✅ |
 | 2 | `projects/02-g474-dac-fft/` | STM32G474RET6 | 内部 DAC 自闭环 FFT | 🔲 |
 | 3 | `projects/03-g474-dual-ad9833-fft/` | STM32G474RET6 | 双 AD9833 + ADC DMA FFT | 🔲 |
+| 4 | `projects/04-g474-lcr-sweep-fft/` | STM32G474RET6 | LCR 网络扫频分析仪 | 🟡 90% |
+| 5 | `projects/05-g474-scope-analyzer/` | STM32G474RET6 | **电赛G题：周期信号测量分析装置** | 🔲 进行中 |
 
 ---
 
@@ -60,13 +62,79 @@ mcu:  芯片简写，如 f103 / g474 / mspm0g3507
 
 ---
 
-## 常用技能（Claude Code Skills）
+## 常用技能（Claude Code Skills） — 共 41 个
 
-嵌入式: `stm32-baremetal` `spi-i2c-baremetal` `adc-dac-baremetal` `dma-baremetal` `timers-pwm-baremetal` `interrupts-baremetal` `embedded-systems`
-电路: `circuit-debugger` `eda-schematics` `eda-pcb` `spice-simulation`
-元器件: `lcsc-parts` `jlcpcb` `datasheet-interpreter`
-信号处理: `matlab-digital-filter`
-通用: `math` `official-document-writer`
+> ⚠️ 完成电赛相关任务时，优先调用对应技能，不要裸写。技能即知识库，不调用 = 浪费。
+
+### 嵌入式开发（16）
+| 技能 | 用途 | 何时调用 |
+|------|------|----------|
+| `stm32-baremetal` | STM32 裸机开发全流程 | 新建 STM32 工程、HAL 库配置 |
+| `spi-i2c-baremetal` | SPI/I2C 通信驱动 | SPI 时序、I2C 地址扫描 |
+| `adc-dac-baremetal` | ADC 采样 / DAC 输出 | 模拟信号采集、波形生成 |
+| `dma-baremetal` | DMA 数据传输 | 高速 ADC 采集、内存搬运 |
+| `timers-pwm-baremetal` | 定时器与 PWM | 波形生成、频率/占空比控制 |
+| `interrupts-baremetal` | 中断与 NVIC | 按键中断、定时器中断 |
+| `gpio-baremetal` | GPIO 输入输出 | 引脚配置、LED/按键驱动 |
+| `uart-serial-baremetal` | UART 串口通信 | 调试打印、模块通信 |
+| `mmio-bit-manipulation` | 寄存器位操作 | 直接操作寄存器、掩码运算 |
+| `baremetal-startup` | 启动文件与向量表 | .s 文件、VTOR、堆栈初始化 |
+| `embedded-systems` | 嵌入式系统设计 | 系统架构、功耗分析 |
+| `freertos` | FreeRTOS 内核 | 任务创建、调度、队列 |
+| `freertos-patterns` | FreeRTOS 设计模式 | 任务间通信、信号量、互斥锁 |
+| `i2c-diagnostician` | I2C 总线诊断 | I2C 通信故障排查 |
+| `sensor-calibration` | 传感器标定 | ADC 值 → 物理量转换 |
+| `power-budget-calculator` | 功耗预算计算 | 电池续航估算、电源设计 |
+
+### 电路与 EDA（7）
+| 技能 | 用途 | 何时调用 |
+|------|------|----------|
+| `eda-schematics` | 原理图设计 | 画电路图、选型 |
+| `eda-pcb` | PCB 布局布线 | 画板子、走线 |
+| `eda-drc` | 设计规则检查 | 投产前 DRC/ERC 验证 |
+| `spice-simulation` | 电路仿真 | 运放、滤波电路仿真 |
+| `circuit-debugger` | 电路故障诊断 | 焊接后板子不工作 |
+| `kicad` | KiCad 工具链 | KiCad 原理图/PCB 操作 |
+| `tscircuit` | TypeScript 电路设计 | 代码化电路设计 |
+
+### 元器件与制造（5）
+| 技能 | 用途 | 何时调用 |
+|------|------|----------|
+| `lcsc-parts` | 立创商城选料 | 查价格、封装、库存 |
+| `jlcpcb` | 嘉立创打板 | 投板参数、拼版、SMT |
+| `bom-generator` | BOM 清单生成 | 整理物料清单 |
+| `bom-generator-kicad` | KiCad BOM 导出 | 从 KiCad 导出 BOM |
+| `battery-selector` | 电池选型 | 便携设备供电方案 |
+
+### 数据手册（3）
+| 技能 | 用途 | 何时调用 |
+|------|------|----------|
+| `datasheet-interpreter` | 手册解读 | 看不懂参数、寄存器 |
+| `datasheet-reading` | 手册查阅方法 | 如何高效读手册 |
+| `datasheets-kicad` | KiCad 关联数据手册 | 链接手册到元件 |
+
+### 信号处理与数学（3）
+| 技能 | 用途 | 何时调用 |
+|------|------|----------|
+| `matlab-digital-filter` | 数字滤波器设计 | FIR/IIR 滤波器系数 |
+| `matlab-agentic-toolkit` | MATLAB 工具链 | 数据处理、算法验证 |
+| `math` | 数学推导与公式 | 误差分析、公式推导 |
+
+### 文档与报告（6）⭐ 电赛关键
+| 技能 | 用途 | 何时调用 |
+|------|------|----------|
+| `official-document-writer` | 中文公文/报告 | 设计报告正文撰写 |
+| `academic-paper` | 学术论文全流程（12 agent） | 完整论文撰写、润色、审稿回复 |
+| `academic-writer` | 顶会/期刊论文 + AIGC 降重 | 中文期刊论文（CCF/知网格式） |
+| `latex-paper-conversion` | LaTeX 模板转换 | 不同期刊模板互转 |
+| `ppt-creator` | PPT 演示文稿 | 答辩 PPT 制作 |
+| `dataviz` | 数据可视化 | 测试曲线、误差棒图、频谱图 |
+
+### 元工具（2）
+| 技能 | 用途 | 何时调用 |
+|------|------|----------|
+| `find-skills` | 搜索安装新技能 | 发现缺工具 |
+| `skill-creator` | 创建自定义技能 | 封装重复流程
 
 ---
 
