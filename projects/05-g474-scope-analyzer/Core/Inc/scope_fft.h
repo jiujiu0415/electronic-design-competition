@@ -121,6 +121,20 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
                               uint16_t len, float fs_hz);
 
 /**
+ * ScopeFFT_AnalyzeSimple — 单 ADC 简化分析 (要求1/2, 无干扰)
+ *
+ * 仅需 ADC1 信号缓冲。Vpp/Vrms 从时域直接计算，
+ * 不做干扰识别/波形重建/交叉验证。
+ *
+ * @param signal_buf  ADC1 信号原始数据 (uint16_t[4096])
+ * @param len         数据长度 (= 4096)
+ * @param fs_hz       采样率 (Hz)
+ * @return            测量结果 (confidence 恒为 HIGH)
+ */
+ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
+                                    uint16_t len, float fs_hz);
+
+/**
  * ScopeFFT_Print — 串口打印测量结果
  */
 void ScopeFFT_Print(const ScopeResult *r);

@@ -82,7 +82,9 @@ static void uart_print(const char *str)
 
   while (1)
   {
-      // ── 等待双 ADC DMA 采满 (100ms 超时保护) ──
+      /* ═══════════════════════════════════════
+       * 要求1/2 (无干扰): 用 ScopeFFT_AnalyzeSimple
+       * ═══════════════════════════════════════ */
       uart_print("\r\nWaiting...\r\n");
       uint32_t timeout = HAL_GetTick();
       while (!ScopeADC_Ready())
@@ -93,32 +95,20 @@ static void uart_print(const char *str)
               break;
           }
       }
+      if (!ScopeADC_Ready()) { ScopeADC_Restart(); HAL_Delay(500); continue; }
 
-      if (!ScopeADC_Ready())
-      {
-          // 超时 → 重启并重试
-          ScopeADC_Restart();
-          HAL_Delay(500);
-          continue;
-      }
-
-      // ── 取出双 ADC 数据 ──
-      uint16_t *signal_buf   = ScopeADC_GetSignalBuffer();    // ADC1
-      uint16_t *envelope_buf = ScopeADC_GetEnvelopeBuffer();  // ADC2
-
-      // ── 完整分析 ──
-      ScopeResult r = ScopeFFT_Analyze(signal_buf, envelope_buf,
-                                        SCOPE_ADC_SIGNAL_BUF_SIZE,
-                                        ScopeADC_GetSampleRate());
-
-      // ── 打印结果 ──
+      uint16_t *sig = ScopeADC_GetSignalBuffer();
+      ScopeResult r = ScopeFFT_AnalyzeSimple(sig, 4096, ScopeADC_GetSampleRate());
       ScopeFFT_Print(&r);
-
-      // ── 重启 DMA, 准备下一轮 ──
       ScopeADC_Restart();
-
-      // ── 间隔 (可选) ──
       HAL_Delay(1000);
+
+      /* ═══════════════════════════════════════
+       * 要求3 (有干扰): 改用 ScopeFFT_Analyze
+       *
+       * uint16_t *env = ScopeADC_GetEnvelopeBuffer();
+       * ScopeResult r = ScopeFFT_Analyze(sig, env, 4096, ScopeADC_GetSampleRate());
+       * ═══════════════════════════════════════ */
   }
 
  * ============================================================ */

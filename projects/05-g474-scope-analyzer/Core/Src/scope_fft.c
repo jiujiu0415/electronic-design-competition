@@ -580,6 +580,193 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 }
 
 /* ============================================================
+ * ScopeFFT_AnalyzeSimple — 单 ADC 简化分析 (要求1/2)
+ *
+ * 流程:
+ *   → 时域扫描 → Vdc/Vpp/Vrms (直接, 无干扰无需分离)
+ *   → 去直流+Hann窗 → FFT → 归一化
+ *   → 峰值检测 → 基频 → 谐波
+ *   → vpp_u_b = vpp, vrms_u_b = vrms, confidence = HIGH
+ *
+ * 不做: ADC2检波器, 干扰识别, Parseval, 波形重建, 交叉验证
+ * ============================================================ */
+ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
+                                    uint16_t len, float fs_hz)
+{
+    ScopeResult result;
+    memset(&result, 0, sizeof(result));
+
+    if (len != SCOPE_FFT_SIZE) return result;
+
+    result.freq_resolution = fs_hz / (float)SCOPE_FFT_SIZE;
+
+    /* ── ① 时域参数: Vdc, Vpp, Vrms ── */
+
+    float sum = 0.0f;
+    uint16_t min_val = 4095, max_val = 0;
+
+    for (uint16_t i = 0; i < len; i++)
+    {
+        uint16_t v = signal_buf[i];
+        sum += (float)v;
+        if (v < min_val) min_val = v;
+        if (v > max_val) max_val = v;
+    }
+
+    float dc_adc = sum / (float)len;
+    result.vdc = dc_adc * ADC_VREF / ADC_MAXVAL;
+
+    float vpp_adc = (float)(max_val - min_val);
+    result.vpp = vpp_adc * ADC_VREF / ADC_MAXVAL;
+
+    float sum_sq = 0.0f;
+    for (uint16_t i = 0; i < len; i++)
+    {
+        float diff = (float)signal_buf[i] - dc_adc;
+        sum_sq += diff * diff;
+    }
+    float rms_adc = sqrtf(sum_sq / (float)len);
+    result.vrms = rms_adc * ADC_VREF / ADC_MAXVAL;
+
+    /* 无干扰: vpp_u_b = vpp, vrms_u_b = vrms */
+    result.vpp_u_b  = result.vpp;
+    result.vrms_u_b = result.vrms;
+
+    /* 无 ADC2 */
+    result.vpp_envelope = 0.0f;
+    result.agc_gain = 1.0f;
+    result.interference_expected_amp = 0.0f;
+    result.interference_peaks = 0;
+
+    /* ── ② 去直流 + Hann 窗 ── */
+
+    for (uint16_t i = 0; i < len; i++)
+    {
+        float val = (float)signal_buf[i] - dc_adc;
+        float w = 0.5f * (1.0f - arm_cos_f32(2.0f * PI * i / (float)(len - 1)));
+        fft_in[i] = val * w;
+    }
+
+    /* ── ③ FFT → 复数频谱 → 幅度谱 → 归一化 ── */
+
+    arm_rfft_fast_f32(&fft_inst, fft_in, fft_out, 0);
+    arm_cmplx_mag_f32(fft_out, fft_mag, SCOPE_FFT_SIZE / 2 + 1);
+
+    for (uint16_t i = 0; i <= SCOPE_FFT_SIZE / 2; i++)
+    {
+        if (i == 0)
+            fft_mag[i] = fft_mag[i] / (float)SCOPE_FFT_SIZE;
+        else
+            fft_mag[i] = fft_mag[i] * 4.0f / (float)SCOPE_FFT_SIZE;
+    }
+
+    /* ── ④ 峰值检测 ── */
+
+    uint16_t peak_bins[32];
+    float peak_mags[32];
+    uint8_t peak_count = 0;
+    uint16_t nyquist_bin = SCOPE_FFT_SIZE / 2;
+
+    for (uint16_t k = SCOPE_MIN_BIN; k < nyquist_bin; k++)
+    {
+        float m = fft_mag[k];
+        if (m > fft_mag[k - 1] && m > fft_mag[k + 1] && m > 1e-9f)
+        {
+            if (peak_count < 32)
+            {
+                peak_bins[peak_count] = k;
+                peak_mags[peak_count] = m;
+                peak_count++;
+            }
+        }
+    }
+
+    if (peak_count == 0)
+    {
+        result.confidence = SCOPE_CONFIDENCE_HIGH;
+        return result;
+    }
+
+    /* ── ⑤ 基频: 最低频率的有效峰 ── */
+
+    float max_mag = find_max(peak_mags, peak_count);
+    float threshold = max_mag * SCOPE_PEAK_THRESH;
+
+    int fund_idx = -1;
+    float fund_freq = 1000000.0f;
+    for (uint8_t i = 0; i < peak_count; i++)
+    {
+        float freq_i = peak_bins[i] * fs_hz / SCOPE_FFT_SIZE;
+        if (peak_mags[i] >= threshold
+            && freq_i < fund_freq
+            && freq_i >= 5000.0f)
+        {
+            fund_freq = freq_i;
+            fund_idx = i;
+        }
+    }
+
+    if (fund_idx < 0)
+    {
+        result.confidence = SCOPE_CONFIDENCE_HIGH;
+        return result;
+    }
+
+    float fund_freq_corrected, fund_amp_corrected;
+    parabola_interp(fft_mag, peak_bins[fund_idx],
+                     &fund_freq_corrected, &fund_amp_corrected, fs_hz);
+
+    result.fundamental_freq = fund_freq_corrected;
+    result.fundamental_amp  = fund_amp_corrected * ADC_VREF / ADC_MAXVAL;
+
+    /* ── ⑥ 谐波 ── */
+
+    result.harmonic_count = 0;
+    for (uint8_t order = 2; order <= (SCOPE_MAX_HARM + 1); order++)
+    {
+        float target_freq = (float)order * result.fundamental_freq;
+        if (target_freq > fs_hz * 0.45f) break;
+
+        float target_bin_float = target_freq / fs_hz * SCOPE_FFT_SIZE;
+        int target_bin = (int)(target_bin_float + 0.5f);
+
+        int search_start = target_bin - 2;
+        int search_end   = target_bin + 2;
+        if (search_start < (int)SCOPE_MIN_BIN) search_start = SCOPE_MIN_BIN;
+        if (search_end >= (int)nyquist_bin) search_end = nyquist_bin - 1;
+
+        int best_bin = -1;
+        float best_mag = 0.0f;
+        for (int k = search_start; k <= search_end; k++)
+        {
+            if (fft_mag[k] > best_mag) { best_mag = fft_mag[k]; best_bin = k; }
+        }
+
+        if (best_bin >= 0 && best_mag >= threshold)
+        {
+            float h_freq, h_amp;
+            parabola_interp(fft_mag, (uint16_t)best_bin,
+                             &h_freq, &h_amp, fs_hz);
+
+            uint8_t idx = result.harmonic_count;
+            result.harmonics[idx].freq_hz   = h_freq;
+            result.harmonics[idx].amplitude = h_amp * ADC_VREF / ADC_MAXVAL;
+            result.harmonics[idx].bin       = (uint16_t)best_bin;
+            result.harmonics[idx].phase_rad = 0.0f;
+            result.harmonics[idx].is_interference = 0;
+            result.harmonic_count++;
+
+            if (result.harmonic_count >= SCOPE_MAX_HARM) break;
+        }
+    }
+
+    /* 要求1/2: 无干扰, 高置信度 */
+    result.confidence = SCOPE_CONFIDENCE_HIGH;
+
+    return result;
+}
+
+/* ============================================================
  * ScopeFFT_Print — 串口打印结果
  * ============================================================ */
 void ScopeFFT_Print(const ScopeResult *r)
