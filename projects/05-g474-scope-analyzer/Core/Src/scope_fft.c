@@ -252,11 +252,15 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
     /* ═══════════════════════════════════════════════
      * 阶段 3: 峰值检测
+     *
+     * 收集所有局部极大值 (最多256个), 然后按幅值降序排列,
+     * 取前32个最强的。确保真实信号峰 (幅值数百) 不会被
+     * 大量低频噪声峰 (幅值0.1~0.7) 挤出列表。
      * ═══════════════════════════════════════════════ */
 
-    uint16_t peak_bins[32];
-    float    peak_mags[32];
-    uint8_t  peak_count = 0;
+    uint16_t peak_bins[256];
+    float    peak_mags[256];
+    uint16_t peak_count = 0;
     uint16_t nyquist    = SCOPE_FFT_SIZE / 2;
 
     for (uint16_t k = SCOPE_MIN_BIN; k < nyquist; k++)
@@ -264,7 +268,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
         float m = fft_mag[k];
         if (m > fft_mag[k - 1] && m > fft_mag[k + 1] && m > 1e-9f)
         {
-            if (peak_count < 32)
+            if (peak_count < 256)
             {
                 peak_bins[peak_count] = k;
                 peak_mags[peak_count] = m;
@@ -272,6 +276,26 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
             }
         }
     }
+
+    /* 按幅值降序排列 (简单冒泡, 256个最多~32K次比较) */
+    for (uint16_t i = 0; i < peak_count; i++)
+    {
+        for (uint16_t j = i + 1; j < peak_count; j++)
+        {
+            if (peak_mags[j] > peak_mags[i])
+            {
+                uint16_t tmp_b = peak_bins[i];
+                float    tmp_m = peak_mags[i];
+                peak_bins[i] = peak_bins[j];
+                peak_mags[i] = peak_mags[j];
+                peak_bins[j] = tmp_b;
+                peak_mags[j] = tmp_m;
+            }
+        }
+    }
+
+    /* 只保留前32个最强的峰 */
+    if (peak_count > 32) peak_count = 32;
 
     if (peak_count == 0)
     {
@@ -283,7 +307,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     {
         char buf[128];
         HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n[PEAKS] ", 9, 1000);
-        for (uint8_t i = 0; i < peak_count && i < 10; i++)
+        for (uint16_t i = 0; i < peak_count && i < 10; i++)
         {
             float pf = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
             snprintf(buf, sizeof(buf), "#%d: bin=%d f=%.0fHz mag=%.1f | ",
@@ -314,7 +338,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     int   best_match    = -1;  /* -1 = 尚未找到有效候选 */
     float best_mag      = 0.0f;
 
-    for (uint8_t i = 0; i < peak_count; i++)
+    for (uint16_t i = 0; i < peak_count; i++)
     {
         float fc = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
 
@@ -329,7 +353,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
             int expected_bin = (int)(expected / fs_hz
                                      * (float)SCOPE_FFT_SIZE + 0.5f);
-            for (uint8_t j = 0; j < peak_count; j++)
+            for (uint16_t j = 0; j < peak_count; j++)
             {
                 if (j == i) continue;
                 int db = (int)peak_bins[j] - expected_bin;
@@ -351,7 +375,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     if (best_fund_idx < 0)
     {
         best_mag = 0.0f;
-        for (uint8_t i = 0; i < peak_count; i++)
+        for (uint16_t i = 0; i < peak_count; i++)
         {
             float f = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
             if (f >= 5000.0f && f <= 500000.0f && peak_mags[i] > best_mag)
@@ -378,7 +402,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
     /* 抛物线插值修正基频 (吸附前) */
     float fund_freq_precise, fund_amp_raw;
-    parabola_interp(fft_mag, peak_bins[(uint8_t)best_fund_idx],
+    parabola_interp(fft_mag, peak_bins[(uint16_t)best_fund_idx],
                      &fund_freq_precise, &fund_amp_raw,
                      fs_hz, SCOPE_FFT_SIZE);
 
@@ -396,7 +420,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     /* ═══════════════════════════════════════════════
      * 阶段 5: 基波相位提取 (在原始 bin 处)
      * ═══════════════════════════════════════════════ */
-    float fund_phase_raw = extract_phase(peak_bins[(uint8_t)best_fund_idx], SCOPE_FFT_SIZE);
+    float fund_phase_raw = extract_phase(peak_bins[(uint16_t)best_fund_idx], SCOPE_FFT_SIZE);
 
     /* ═══════════════════════════════════════════════
      * 阶段 6: 谐波搜索 (f_k = k × f₁ 附近)
@@ -404,12 +428,12 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
     r.harmonic_count = 0;
     uint8_t peak_claimed[32] = {0};
-    peak_claimed[(uint8_t)best_fund_idx] = 1;
+    peak_claimed[(uint16_t)best_fund_idx] = 1;
 
     /* 谐波搜索阈值: 全局最强峰的 5% */
     {
         float global_max = 0.0f;
-        for (uint8_t i = 0; i < peak_count; i++)
+        for (uint16_t i = 0; i < peak_count; i++)
             if (peak_mags[i] > global_max) global_max = peak_mags[i];
         float threshold = global_max * SCOPE_PEAK_THRESH;
 
@@ -461,7 +485,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
             r.harmonic_count++;
 
             /* 标记该峰值已被认领 */
-            for (uint8_t p = 0; p < peak_count; p++)
+            for (uint16_t p = 0; p < peak_count; p++)
                 if (peak_bins[p] == (uint16_t)best_bin)
                     peak_claimed[p] = 1;
 
@@ -509,7 +533,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
      * ═══════════════════════════════════════════════ */
 
     uint8_t interference_count = 0;
-    for (uint8_t i = 0; i < peak_count; i++)
+    for (uint16_t i = 0; i < peak_count; i++)
     {
         if (peak_claimed[i]) continue;
 
