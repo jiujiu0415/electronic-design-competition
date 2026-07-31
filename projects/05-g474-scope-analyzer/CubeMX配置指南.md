@@ -11,7 +11,7 @@
 |---|---------|---------|
 | ADC1 | PA0，独立 2MSPS | **PA0，Master，交替 4MSPS** |
 | ADC2 | PA1，独立 2MSPS（检波器） | **PA0，Slave，与 ADC1 交替** |
-| ADC3 | — | **PA1，独立采集检波器直流** |
+| ADC3 | — | **PB1，独立采集检波器直流** |
 | DMA | 两个独立 16-bit DMA | **ADC1 单路 32-bit DMA（读 CDR）** |
 | FFT | 4096 @2MSPS | **8192 @4MSPS** |
 | 模拟开关 | — | **PA4 GPIO 控制 u_J 接入** |
@@ -199,16 +199,16 @@ ADC1 → **DMA Settings** → **Add**：
 
 ## ═══ 第5步：ADC3 — 检波器独立采集 ═══
 
-> ADC1+2 被交替模式占满后，检波器信号转到 PA1 → **ADC3_IN1**。
+> ADC1+2 被交替模式占满后，检波器信号转到 **PB1 → ADC3_IN1**。
 > 检波器是直流，不需要高速采集，软件触发单次转换即可。
+>
+> ⚠️ **为什么不是 PA1？** G474RET6 上 PA1 的 ADC 功能只有 ADC1_IN2 和 ADC2_IN2，
+> 没有 ADC3_IN1。ADC3_IN1 在 PB1 上。功能无差异，都是 Fast Channel。
 
 ### 5.1 引脚模式
 
 Pinout & Configuration → Analog → **ADC3**:
-- IN1 (PA1) → **IN1 Single-ended**
-
-> PA1 在 G474 上的 ADC 功能：ADC1_IN2, ADC2_IN2, **ADC3_IN1**。选 ADC3_IN1 因为 ADC1/2 已被交替模式占用。
-> 参考：数据手册 DS12288 Rev 6，PA1 = Fast Channel（ADC3_IN1）。
+- IN1 (PB1) → **IN1 Single-ended**
 
 ### 5.2 ADC3 参数
 
@@ -228,7 +228,7 @@ Rank（Number Of Conversion = **1**）：
 
 | Rank | Channel | Sampling Time |
 |------|---------|---------------|
-| 1 | **Channel 1 (PA1)** | **2.5 cycles** |
+| 1 | **Channel 1 (PB1)** | **2.5 cycles** |
 
 ### 5.3 ADC3 DMA
 
@@ -370,7 +370,7 @@ Library search path: `../Drivers/CMSIS/DSP/Lib/GCC`
 1. **Ctrl+S** 保存 .ioc
 2. **截图**（电赛现场重配会快很多）：
    - Clock Configuration 时钟树
-   - Pinout 视图（确认 PA0 双 ADC + PA1 ADC3 + PA4 GPIO）
+   - Pinout 视图（确认 PA0 双 ADC + PB1 ADC3 + PA4 GPIO）
    - ADC1 ADCs_Common_Settings
 3. **Project → Generate Code**
 
@@ -410,7 +410,8 @@ Library search path: `../Drivers/CMSIS/DSP/Lib/GCC`
 | Pin | Signal | Function | 备注 |
 |-----|--------|----------|------|
 | PA0 | ADC1_IN1 + ADC2_IN1 | 信号输入（经 AGC+偏置） | **双 ADC 交替** |
-| PA1 | ADC3_IN1 | 检波器直流（跟随器后） | 独立 ADC3 |
+| PA1 | — | （未使用） | 仅有 ADC1_IN2/ADC2_IN2 |
+| PB1 | ADC3_IN1 | 检波器直流（跟随器后） | 独立 ADC3, Fast Channel |
 | PA2 | USART2_TX | 串口打印 | |
 | PA4 | GPIO_Output | 模拟开关控制 | LOW=断开, HIGH=闭合 |
 | PA13 | SYS_SWDIO | ST-LINK 调试 | |

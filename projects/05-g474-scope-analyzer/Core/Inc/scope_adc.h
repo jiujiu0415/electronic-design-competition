@@ -7,7 +7,7 @@
  *   DMA1_CH1 Circular, Word (32-bit), 从 ADC_CDR 搬运 4096 个 32-bit 字
  *   CDR[15:0]=ADC1, CDR[31:16]=ADC2, 解包后共 8192 个采样点
  *
- * ADC3 (PA1): 独立采集检波器直流电压
+ * ADC3 (PB1): 独立采集检波器直流电压
  *   软件触发单次转换, 无需 DMA
  *
  * GPIO PA4: 模拟开关控制 (LOW=断开u_J, HIGH=闭合u_J)

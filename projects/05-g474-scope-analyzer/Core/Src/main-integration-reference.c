@@ -11,7 +11,7 @@
  *
  * ADC 架构 (v3):
  *   ADC1+2 (PA0): 交替采集信号, TIM2 TRGO @2MHz → 4MSPS, DMA CDR 32-bit
- *   ADC3 (PA1):   独立采集检波器直流 → 软件触发单次
+ *   ADC3 (PB1):   独立采集检波器直流 → 软件触发单次
  *   GPIO PA4:     模拟开关 (LOW=断开u_J, HIGH=闭合u_J)
  *
  * FFT: 8192 @4MSPS, 分辨率 488Hz
@@ -83,7 +83,7 @@ static void uart_print(const char *str)
   uart_print("\r\n");
   uart_print("=== Scope Analyzer v3 — Dual Interleaved 4MSPS ===\r\n");
   uart_print("ADC1+2(PA0): Interleaved 4MSPS\r\n");
-  uart_print("ADC3(PA1):   Envelope Detector\r\n");
+  uart_print("ADC3(PB1):   Envelope Detector\r\n");
   uart_print("FFT: 8192 pt, Res: 488 Hz, Nyquist: 2 MHz\r\n");
 
   // ── 初始化 FFT ──

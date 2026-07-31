@@ -13,7 +13,7 @@
  *                           ↓ 解包
  *                     8192 个 uint16_t 采样点 → FFT
  *
- * ADC3: PA1, 软件触发单次 → 检波器直流 Vd(raw)
+ * ADC3: PB1, 软件触发单次 → 检波器直流 Vd(raw)
  *
  * 模拟开关: PA4 GPIO Output
  *
