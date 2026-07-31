@@ -14,7 +14,6 @@
 #define __SCOPE_FFT_H
 
 #include "stm32g4xx_hal.h"
-#include "arm_math.h"
 
 /* ============================================================
  * 宏定义

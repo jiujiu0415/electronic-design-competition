@@ -35,8 +35,6 @@ static float32_t fft_mag [SCOPE_FFT_SIZE / 2 + 1]; /* 幅度谱 */
 
 /* 工具宏 */
 #define ABS_F(x)  ((x) < 0.0f ? -(x) : (x))
-#define MAX_F(a,b) ((a) > (b) ? (a) : (b))
-#define MIN_F(a,b) ((a) < (b) ? (a) : (b))
 
 /* ============================================================
  * 工具函数: 抛物线插值 — 修正频率+幅度
@@ -151,9 +149,9 @@ static float calibrate_phase_rad(float phase_measured_rad, float freq_hz)
     float phi_lpf  = ScopeCalib_GetLPFPhase(freq_hz);
     float phi_orig = phase_measured_rad - phi_lpf;
 
-    /* 规范化到 [−π, +π] */
-    if      (phi_orig >  PI) phi_orig -= 2.0f * PI;
-    else if (phi_orig < -PI) phi_orig += 2.0f * PI;
+    /* 规范化到 [−π, +π] (while: 极端情况下差值可能 >2π) */
+    while (phi_orig >  PI) phi_orig -= 2.0f * PI;
+    while (phi_orig < -PI) phi_orig += 2.0f * PI;
 
     return phi_orig;
 }
@@ -204,7 +202,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     }
 
     float dc_adc_raw = sum / (float)len;
-    r.vdc_mV = V_to_mV(adc_to_V(dc_adc_raw));
+    r.vdc_mV = dc_adc_raw * (SCOPE_ADC_VREF / SCOPE_ADC_MAX) * 1000.0f;
 
     /* ── 去直流 + Hann 窗 (fft_in) ── */
     for (uint16_t i = 0; i < len; i++)
@@ -333,9 +331,6 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     if (N < 20)  N = 20;
     if (N > 1000) N = 1000;
     r.f1_hz = (float)N * SCOPE_FREQ_STEP;
-
-    /* 基频 bin (吸附后, 用于谐波定位) */
-    uint16_t fund_bin_snapped = (uint16_t)(r.f1_hz / fs_hz * (float)SCOPE_FFT_SIZE + 0.5f);
 
     /* ═══════════════════════════════════════════════
      * 阶段 5: 基波相位提取 (在原始 bin 处)
