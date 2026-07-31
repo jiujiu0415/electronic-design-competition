@@ -97,3 +97,55 @@ float ScopeCalib_GetHchain(float freq_hz)
         return 1.0332837f + dx * (-0.2180002f + dx * (-0.6681422f + dx * 1.0912990f));
     }
 }
+
+/* ================================================================
+ *  LPF 相位校准: φ_LPF(f)
+ *  萨伦-基二阶有源低通滤波器 (Sallen-Key)
+ *  运放 OPA2140AID 单位增益跟随器, 双电源
+ *  R1=1.3kΩ, R2=1.8kΩ, C1=200pF, C2=100pF
+ *
+ *  传递函数:
+ *    H(s) = ω₀² / (s² + s·ω₀/Q + ω₀²)
+ *    H(jω) = 1 / (1 − ω²·R1·R2·C1·C2 + jω·(R1+R2)·C2)
+ *
+ *  相位 (从电路模型直接推导):
+ *    φ(f) = −atan2(ω·(R1+R2)·C2,  1 − ω²·R1·R2·C1·C2)
+ *         = −atan2((f/f₀)/Q,       1 − (f/f₀)²)
+ *
+ *  其中:
+ *    ω  = 2π·f
+ *    f₀ = 1/(2π√(R1·R2·C1·C2)) = 735.8 kHz
+ *    Q  = √(R1·R2·C1·C2)/((R1+R2)·C2) = 0.698
+ *
+ *  信号源约束: 基波+谐波相位恒为0
+ *    → φ_original[k] = φ_measured[k] − φ_LPF(k·f₁) = 0
+ *    → 实测φ_measured应等于预测φ_LPF, 可验证电路模型精度
+ * ================================================================ */
+
+/* Sallen-Key 元件参数 (来自原理图 SCH_Schematic2_1-P1_2026-07-31) */
+#define LPF_R1   1300.0f           /* Ω */
+#define LPF_R2   1800.0f           /* Ω */
+#define LPF_C1   200e-12f          /* F  — 反馈电容 (R1-R2结点→输出) */
+#define LPF_C2   100e-12f          /* F  — 对地电容 (同相端→GND)   */
+
+/* 由元件参数导出的特征量 */
+#define LPF_F0   735789.0f         /* Hz — 自然频率 ω₀/(2π) */
+#define LPF_Q    0.6978f           /*    — 品质因数 */
+
+/* 分子系数: ω·(R1+R2)·C2 = 2π·f·3100·100pF = 1.9478×10⁻⁶·f
+ * 优化: 直接用 (f/f₀)/Q = f / (f₀·Q) = f / 513407 */
+#define LPF_F0Q  513407.0f         /* Hz — f₀ × Q */
+
+float ScopeCalib_GetLPFPhase(float freq_hz)
+{
+    float ratio   = freq_hz / LPF_F0;          /* f/f₀        */
+    float num     = freq_hz / LPF_F0Q;         /* (f/f₀)/Q    = ω·(R1+R2)·C2 */
+    float den     = 1.0f - ratio * ratio;      /* 1−(f/f₀)²   = 1−ω²·R1·R2·C1·C2 */
+
+    /* atan2f(num, den) 自动处理象限:
+     *   f < f₀: den > 0, 相位 ∈ (0°, −90°)
+     *   f = f₀: den = 0, 相位 = −90°
+     *   f > f₀: den < 0, 相位 ∈ (−90°, −180°) — atan2f 自动加 π
+     */
+    return -atan2f(num, den);
+}

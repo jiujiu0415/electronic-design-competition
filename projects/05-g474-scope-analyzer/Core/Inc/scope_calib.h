@@ -1,18 +1,20 @@
 /**
  * @file    scope_calib.h
- * @brief   信号链路校准 — AGC增益 + 加法器/滤波器频响修正
+ * @brief   信号链路校准 — AGC增益 + 加法器/滤波器频响 + LPF相位
  * @author  jiujiu0415
  * @date    2026-07-31
  *
- * 包含两组校准:
+ * 包含三组校准:
  *   1. ScopeAGC_ComputeGain()   — 检波器直流 → AGC放大倍数 (二次拟合)
  *   2. ScopeCalib_GetHchain()   — 频率 → 加法器+滤波器链增益 (三次样条)
+ *   3. ScopeCalib_GetLPFPhase() — 频率 → LPF相位偏移 (萨伦-基电路模型)
  */
 
 #ifndef SCOPE_CALIB_H
 #define SCOPE_CALIB_H
 
 #include <stdint.h>
+#include <math.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,6 +43,30 @@ float ScopeAGC_ComputeGain(float vd_mV);
  * 用途: V_original = V_measured / ScopeAGC_ComputeGain(Vd) / H_chain(f)
  */
 float ScopeCalib_GetHchain(float freq_hz);
+
+/* ── LPF 相位校准 (新增) ────────────────────────────────────── */
+
+/**
+ * @brief  萨伦-基二阶有源低通滤波器相位偏移 φ_LPF(f)
+ * @param  freq_hz  信号频率 (Hz), 范围 0 ~ 2 MHz
+ * @return 相位偏移 (弧度), 负值 (LPF 输出滞后于输入)
+ *
+ * 电路: OPA2140AID 单位增益跟随器, R1=1.3kΩ, R2=1.8kΩ,
+ *       C1=200pF (反馈), C2=100pF (对地)
+ *
+ * 传递函数:
+ *   H(s) = 1 / (1 + s·(R1+R2)·C2 + s²·R1·R2·C1·C2)
+ * 相位:
+ *   φ(f) = −atan2(2πf·(R1+R2)·C2,  1 − (2πf)²·R1·R2·C1·C2)
+ *        = −atan2((f/f₀)/Q,         1 − (f/f₀)²)
+ *
+ * f₀ = 735.8 kHz (1/(2π√(R1·R2·C1·C2)))
+ * Q  = 0.698
+ *
+ * 用途: φ_original[k] = φ_measured[k] − φ_LPF(k·f₁)
+ *       (信号源谐波相位均为0, 修正后相位应为0)
+ */
+float ScopeCalib_GetLPFPhase(float freq_hz);
 
 #ifdef __cplusplus
 }
