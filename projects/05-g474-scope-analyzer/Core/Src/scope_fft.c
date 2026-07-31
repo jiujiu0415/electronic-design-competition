@@ -383,8 +383,15 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     uint8_t peak_claimed[32] = {0};
     peak_claimed[(uint8_t)best_fund_idx] = 1;
 
-    for (uint8_t order = 2; order <= (SCOPE_MAX_HARM + 1); order++)
+    /* 谐波搜索阈值: 全局最强峰的 5% */
     {
+        float global_max = 0.0f;
+        for (uint8_t i = 0; i < peak_count; i++)
+            if (peak_mags[i] > global_max) global_max = peak_mags[i];
+        float threshold = global_max * SCOPE_PEAK_THRESH;
+
+        for (uint8_t order = 2; order <= (SCOPE_MAX_HARM + 1); order++)
+        {
         float target_freq = (float)order * r.f1_hz;
 
         /* 超过 Nyquist 的 90% 停止搜索 */
@@ -437,6 +444,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
             if (r.harmonic_count >= SCOPE_MAX_HARM) break;
         }
+    }
     }
 
     /* ═══════════════════════════════════════════════
