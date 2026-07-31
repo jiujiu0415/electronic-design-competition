@@ -1,15 +1,21 @@
 /**
  * scope_fft.h — FFT 频谱分析 + 时域参数测量 + 干扰识别 + 交叉验证
  *
- * 输入: ADC1 信号缓冲 (uint16_t[4096]) + ADC2 检波器缓冲 (uint16_t[4096])
+ * v3: Dual Interleaved 4MSPS (2026-07-31)
+ *
+ * 输入: float[8192] (已解包+去直流的时间顺序采样值)
+ *   — 由 scope_adc.c 的 CDR 32-bit DMA 缓冲解包得到
+ *   — 采样率 4.0 MSPS, 交替: ADC1@t0, ADC2@t250ns, ADC1@t500ns, ...
+ *
  * 输出: 基频 f₁、Vpp、Vrms、谐波频率+幅值+相位、干扰识别、置信度
  *
- * 依赖: CMSIS-DSP (arm_math.h), scope_adc.h
+ * 依赖: CMSIS-DSP (arm_math.h), scope_adc.h, scope_calib.h
  *
  * FFT 参数:
- *   N = 4096, Fs = 2.0 MSPS → 频率分辨率 = 488 Hz
+ *   N = 8192, Fs = 4.0 MSPS → 频率分辨率 = 488 Hz
  *   窗函数: Hann (幅度精度优先)
  *   峰值检测: 抛物线插值修正
+ *   基频吸附: round(f₁_raw / 500) × 500
  */
 
 #ifndef __SCOPE_FFT_H
@@ -22,8 +28,8 @@
  * 宏定义
  * ============================================================ */
 
-#define SCOPE_FFT_SIZE    4096
-#define SCOPE_FS          2000000.0f
+#define SCOPE_FFT_SIZE    8192
+#define SCOPE_FS          4000000.0f
 #define SCOPE_BIN_HZ      (SCOPE_FS / SCOPE_FFT_SIZE)  /* 488.28 Hz */
 #define SCOPE_MAX_HARM     8          /* 最多检测 8 次谐波 */
 #define SCOPE_PEAK_THRESH  0.05f      /* 峰值阈值: 低于基频5%的忽略 */
@@ -36,7 +42,7 @@
 #define SCOPE_VERIFY_AMP_MATCH_TOL  0.20f /* 干扰幅值匹配容差: 20% */
 
 /* AGC 参数 */
-#define SCOPE_AGC_TARGET_VPP  3.20f    /* AD603 AGC 目标输出 Vpp */
+#define SCOPE_AGC_TARGET_VPP  3.00f    /* AD603 AGC 目标输出 Vpp (v4架构) */
 #define SCOPE_AGC_GAIN_MIN    1.0f     /* AGC 增益下限 */
 #define SCOPE_AGC_GAIN_MAX    100.0f   /* AGC 增益上限 (~40dB) */
 #define SCOPE_INTERFERENCE_VPP 0.20f   /* 干扰 200mVpp (已知固定值) */
@@ -103,38 +109,38 @@ typedef struct {
  * ============================================================ */
 
 /**
- * ScopeFFT_Init — 初始化 FFT 实例 (只调用一次)
+ * ScopeFFT_Init — 初始化 FFT 实例 (8192 点, 只调用一次)
+ *
+ * 分配 arm_rfft_fast_instance_f32, 可在 CCM SRAM 分配 FFT 缓冲。
  */
 void ScopeFFT_Init(void);
 
 /**
- * ScopeFFT_Analyze — 对双 ADC 数据执行完整分析
+ * ScopeFFT_AnalyzeInterleaved — v3 交替数据完整分析
  *
- * @param signal_buf   ADC1 信号原始数据 (uint16_t[4096])
- * @param envelope_buf ADC2 检波器原始数据 (uint16_t[4096])
- * @param len          数据长度 (= 4096)
- * @param fs_hz        采样率 (Hz, = 2.0e6)
- * @return             完整测量结果 (含置信度)
+ * 输入是已从 CDR 解包的 float 数组 (8192 样本, 4MSPS)。
+ * AGC 增益由 scope_calib 提供, 用于反算原始信号幅值。
+ *
+ * 内部流程:
+ *   1. 去直流 (均值)
+ *   2. Hann 窗
+ *   3. arm_rfft_fast_f32 → 8192 实数 FFT
+ *   4. 幅度谱 + 抛物线插值峰值检测
+ *   5. 500Hz 基频吸附
+ *   6. 谐波搜索 (整数倍验证)
+ *   7. 干扰识别 (非整数倍孤立峰)
+ *   8. 时域重建 Vpp
+ *   9. Parseval Vrms
+ *
+ * @param fft_in     FFT 输入缓冲 float[8192] (可放 CCM)
+ * @param len        数据长度 (= 8192)
+ * @param fs_hz      采样率 (= 4.0e6)
+ * @param agc_gain   AGC 线性增益 (来自 ScopeAGC_ComputeGain)
+ * @return           测量结果 (含置信度)
  */
-ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
-                              const uint16_t *envelope_buf,
-                              uint16_t len, float fs_hz);
-
-/**
- * ScopeFFT_AnalyzeSimple — 单 ADC 简化分析 (要求1/2, 无干扰)
- *
- * 仅需 ADC1 信号缓冲。Vpp/Vrms 从时域直接计算，
- * 不做干扰识别/波形重建/交叉验证。
- *
- * @param signal_buf  ADC1 信号原始数据 (uint16_t[4096])
- * @param len         数据长度 (= 4096)
- * @param fs_hz       采样率 (Hz)
- * @param agc_gain    AGC 线性增益, 1.0=无AGC/直连
- * @return            测量结果 (confidence 恒为 HIGH)
- */
-ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
-                                    uint16_t len, float fs_hz,
-                                    float agc_gain);
+ScopeResult ScopeFFT_AnalyzeInterleaved(float *fft_in,
+                                         uint16_t len, float fs_hz,
+                                         float agc_gain);
 
 /**
  * ScopeFFT_Print — 串口打印测量结果

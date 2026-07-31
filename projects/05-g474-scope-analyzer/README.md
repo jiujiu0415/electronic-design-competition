@@ -87,7 +87,7 @@ u_J (200mVpp) ─────────┘                                    
 | 难点 | 描述 | 方案思路 |
 |------|------|---------|
 | **干扰抑制** | 1MHz+ 干扰（200mVpp） | **硬件+软件双层**：LPF 700kHz + FFT 整数倍验证 |
-| **高速采样** | 500kHz 信号需 ≥1MSPS，分辨率 500Hz | 双ADC交替 4MSPS + 4096 点 FFT (Nyquist=2MHz) |
+| **高速采样** | 500kHz 信号需 ≥1MSPS，分辨率 500Hz | ADC1+2交替 4MSPS + **8192** 点 FFT (Nyquist=2MHz, 分辨率 488Hz) |
 | **小信号放大** | 50mVpp 信号在 12-bit ADC 仅 ~62 LSB | AD603 AGC 自动增益到 3Vpp |
 | **AGC增益标定** | 增益非线性，非简单 G=k/Vd | **42点实测二次拟合** G=f(Vd)，R²=0.9993 |
 | **大屏驱动** | 现有 2.4" ST7789 不满足 ≥6" 要求 | 串口 HMI 屏（UART）或并口大屏 |
@@ -101,14 +101,14 @@ u_J (200mVpp) ─────────┘                                    
 
 | 模块 | 来源 | 复用 | 说明 |
 |------|------|------|------|
-| ADC + DMA + FFT | 04 adc_dual | 🟡 改为双交替 4MSPS + ADC3 | G474 Interleaved 模式 |
+| ADC + DMA + FFT | 04 adc_dual | 🟡 **已更新** Dual Interleaved 4MSPS + ADC3 | G474 Interleaved 模式 |
 | 参数提取 (Vpp/Vrms/f₁) | 04 adc_dual | 🟡 重构计算链 | ÷G÷H_chain + 时域重建 |
 | 频谱峰值检测 | 04 adc_dual | 🟢 已实现 | 抛物线插值 + 相位提取 |
 | 干扰识别 + 交叉验证 | — | 🟡 简化为双层 | LPF硬件 + 整数倍验证 |
-| AGC 增益校准 | — | 🟢 已拟合 | G=f(Vd) R²=0.9993 scope_agc.c |
-| 加法器/滤波器修正 | — | 🟢 已拟合 | H_chain(f) 分段线性插值 |
+| AGC 增益校准 | — | 🟢 已拟合 | G=f(Vd) R²=0.9993 scope_calib.c |
+| 加法器/滤波器修正 | — | 🟢 已拟合 | H_chain(f) 三次样条 scope_calib.c |
 | 画线算法 (Bresenham) | 04 st7789 | 🔲 待复用 | 波形/谱线绘制 |
-| 模拟开关控制 | — | 🔲 需新增 | GPIO 控制 u_J 接入 |
+| 模拟开关控制 | — | 🟢 **已新增** GPIO PA4 | scope_adc.c |
 | 屏幕驱动 | 04 st7789 | ❌ 不适用 | 2.4"→≥6"，协议不同 |
 
 ---
@@ -131,14 +131,14 @@ projects/05-g474-scope-analyzer/
 │   └── 裸芯片硬件注意.md          ← NUCLEO→裸板差异
 ├── Core/
 │   ├── Inc/
-│   │   ├── scope_adc.h           ← 双交替 ADC 驱动 (Interleaved) + ADC3 检波器
-│   │   ├── scope_fft.h           ← FFT 分析 + ScopeResult 结构
-│   │   └── scope_agc.h           ← AGC 增益校准 G = f(Vd)
+│   │   ├── scope_adc.h           ← v3: ADC1+2交替 4MSPS + ADC3 检波器 + GPIO模拟开关
+│   │   ├── scope_fft.h           ← FFT 8192 分析 + ScopeResult 结构
+│   │   └── scope_calib.h         ← AGC 增益校准 + 加法器/滤波器频响修正
 │   └── Src/
-│       ├── scope_adc.c           ← ADC1+ADC2 Interleaved + ADC3 独立
-│       ├── scope_fft.c           ← FFT + 500Hz吸附 + H_chain修正 + 时域重建
-│       ├── scope_agc.c           ← 检波器→AGC增益 二次拟合
-│       └── main-integration-reference.c  ← main.c 集成参考
+│       ├── scope_adc.c           ← v3: Dual Interleaved DMA 32-bit CDR + ADC3 Polling
+│       ├── scope_fft.c           ← FFT 8192 + 500Hz吸附 + H_chain修正 + 时域重建
+│       ├── scope_calib.c         ← 检波器→AGC增益 二次拟合 + 三次样条频响
+│       └── main-integration-reference.c  ← v3 main.c 集成参考 (含 unpack+ADC3+开关)
 ```
 
 ---
@@ -149,13 +149,13 @@ projects/05-g474-scope-analyzer/
 |------|------|------|
 | 1 | 选题确认 + 题目文字提取 + 难点分析 | ✅ 2026-07-29 |
 | 2 | 采样方案论证 | ✅ v1→v2→v3→v4 |
-| 3 | CubeMX 工程创建 + 外设配置 | 🟡 需改为双交替+ADC3 |
-| 4 | ADC 采集驱动 | 🟡 需重构为 Interleaved 模式 |
-| 5 | FFT 分析 + 时域参数 | 🟡 需重构计算链 v4 |
-| 6 | AGC 增益校准 scope_agc.c | 🔲 新增模块 |
-| 7 | 加法器+滤波器频响修正 H_chain(f) | 🔲 scope_fft.c 新增 |
-| 8 | 500Hz 基频吸附 | 🔲 scope_fft.c 阶段④后 |
-| 9 | 模拟开关 GPIO 控制 | 🔲 main.c |
+| 3 | CubeMX 工程创建 + 外设配置 | 🟢 **已更新** Dual Interleaved 4MSPS 配置指南 |
+| 4 | ADC 采集驱动 | 🟢 **已重构** scope_adc.c/h v3 |
+| 5 | FFT 分析 + 时域参数 | 🟡 FFT 8192 需适配 (scope_fft.c) |
+| 6 | AGC 增益校准 scope_calib.c | 🟢 **已完成** G=f(Vd) R²=0.9994 |
+| 7 | 加法器+滤波器频响修正 H_chain(f) | 🟢 **已完成** 三次样条 scope_calib.c |
+| 8 | 500Hz 基频吸附 | 🔲 scope_fft.c |
+| 9 | 模拟开关 GPIO 控制 | 🟢 **已完成** PA4 scope_adc.c |
 | 10 | 烧录验证 | 🔲 |
 | 11 | 要求1/2/3 完整测试 | 🔲 |
 | 12 | 大屏驱动 + 波形显示 | 🔲 |
