@@ -279,6 +279,21 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
         return r;
     }
 
+    /* ── 诊断: 打印所有检测到的峰 (排查用, 确认后可删除) ── */
+    {
+        char buf[128];
+        HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n[PEAKS] ", 9, 1000);
+        for (uint8_t i = 0; i < peak_count && i < 10; i++)
+        {
+            float pf = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
+            snprintf(buf, sizeof(buf), "#%d: bin=%d f=%.0fHz mag=%.1f | ",
+                     i, peak_bins[i], pf, peak_mags[i]);
+            HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
+        }
+        snprintf(buf, sizeof(buf), "total=%d peaks\r\n", peak_count);
+        HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
+    }
+
     /* ═══════════════════════════════════════════════
      * 阶段 4: 基频检测 → 500Hz 吸附
      *
@@ -345,6 +360,14 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
                 best_fund_idx = (int)i;
             }
         }
+    }
+
+    /* ── 诊断: 谐波匹配结果 ── */
+    {
+        char buf[96];
+        snprintf(buf, sizeof(buf), "[MATCH] chosen idx=%d, matches=%d, mag=%.1f\r\n",
+                 best_fund_idx, best_match, best_mag);
+        HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
     }
 
     if (best_fund_idx < 0)
