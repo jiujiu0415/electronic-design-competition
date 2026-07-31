@@ -142,16 +142,21 @@ Rank 配置（Number Of Conversion = **1**）：
 
 ADC2 → **Parameter Settings**：
 
-> ⚠️ ADC2 在 Dual 模式下**自动跟随 ADC1**。时钟、分辨率、触发源、采样时间全部和 ADC1 一致，CubeMX 会自动同步。
+> ⚠️ ADC2 设为 Interleaved 模式的 Slave 后，CubeMX 会**自动隐藏/锁定**部分选项。
+> 这是正常的：
+> - **External Trigger** 被隐藏 → Slave 的触发由 Master（ADC1）的双模式机制自动管理，不从外部源取触发
+> - **DMA Continuous Requests** 灰色/无法 Enable → Slave 不需要独立 DMA，数据统一进 ADC_CDR 由 ADC1 的 DMA 搬运
+> - **End Of Conversion Selection** 和 **Overrun behaviour** → 保持默认即可，Dual 模式下由 Master 统一控制
+
+只需配置以下选项（与 ADC1 保持一致）：
 
 | 参数 | 值 |
 |------|-----|
-| Clock Prescaler | Synchronous clock mode divided by 4 |
-| Resolution | 12 bits |
+| Clock Prescaler | **Synchronous clock mode divided by 4** |
+| Resolution | **12 bits** |
 | Scan Conversion Mode | **Disable** |
 | Continuous Conversion Mode | **Disable** |
-| DMA Continuous Requests | **Enable**（需同步设为 Enable，但**不单独配 DMA**） |
-| External Trigger | Timer 2 Trigger Out event |
+| DMA Continuous Requests | **Disable**（Slave 不需要 DMA） |
 
 Rank（Number Of Conversion = **1**）：
 
@@ -159,7 +164,7 @@ Rank（Number Of Conversion = **1**）：
 |------|---------|---------------|
 | 1 | **Channel 1 (PA0)** | **2.5 cycles** |
 
-> ⚠️ **ADC2 不需要单独加 DMA！** Dual 模式数据通过 ADC_CDR 统一由 ADC1 的 DMA 搬运。
+> ⚠️ **ADC2 不添加 DMA Settings 标签页的任何条目！** Dual 模式数据通过 ADC_CDR 统一由 ADC1 的 DMA 搬运。
 
 ### 4.5 ADC1 DMA Settings
 
