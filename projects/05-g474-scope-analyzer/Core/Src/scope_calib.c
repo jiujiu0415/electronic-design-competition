@@ -100,9 +100,10 @@ float ScopeCalib_GetHchain(float freq_hz)
 
 /* ================================================================
  *  LPF 相位校准: φ_LPF(f)
- *  萨伦-基二阶有源低通滤波器 (Sallen-Key)
+ *  巴特沃斯二阶有源低通滤波器 (Butterworth, Sallen-Key拓扑)
  *  运放 OPA2140AID 单位增益跟随器, 双电源
  *  R1=1.3kΩ, R2=1.8kΩ, C1=200pF, C2=100pF
+ *  Q ≈ 0.698 (理论 Butterworth Q=1/√2≈0.707, 误差<2%)
  *
  *  传递函数:
  *    H(s) = ω₀² / (s² + s·ω₀/Q + ω₀²)

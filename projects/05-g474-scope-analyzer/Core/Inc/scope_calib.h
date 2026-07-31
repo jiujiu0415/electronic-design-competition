@@ -47,7 +47,7 @@ float ScopeCalib_GetHchain(float freq_hz);
 /* ── LPF 相位校准 (新增) ────────────────────────────────────── */
 
 /**
- * @brief  萨伦-基二阶有源低通滤波器相位偏移 φ_LPF(f)
+ * @brief  巴特沃斯二阶有源低通滤波器相位偏移 φ_LPF(f) (Sallen-Key拓扑)
  * @param  freq_hz  信号频率 (Hz), 范围 0 ~ 2 MHz
  * @return 相位偏移 (弧度), 负值 (LPF 输出滞后于输入)
  *
