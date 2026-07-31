@@ -2,7 +2,7 @@
  * @file    scope_calib.h
  * @brief   信号链路校准 — AGC增益 + 加法器/滤波器频响 + LPF相位
  * @author  jiujiu0415
- * @date    2026-07-31
+ * @date    2026-08-01
  *
  * 包含三组校准:
  *   1. ScopeAGC_ComputeGain()   — 检波器直流 → AGC放大倍数 (二次拟合)
@@ -24,11 +24,11 @@ extern "C" {
 
 /**
  * @brief  从检波器直流电压计算 AGC 放大倍数
- * @param  vd_mV  检波器输出电压 (mV), 范围 [470, 660]
- * @return AGC 线性增益 G, 范围 [11, 61]
+ * @param  vd_mV  检波器输出电压 (mV), 范围 [533, 722]
+ * @return AGC 线性增益 G, 范围 [11.4, 63.1]
  *
- * 二次拟合: G = 474.947 - 1.31554*Vd + 0.0009279*Vd²
- * R² = 0.99935, MAE = 0.305 (42点实测)
+ * 二次拟合: G = 570.756 - 1.45474*Vd + 0.00094137*Vd²
+ * R² = 0.99971, MAE = 0.244 (42点实测, 2026-08-01更新)
  */
 float ScopeAGC_ComputeGain(float vd_mV);
 
@@ -37,9 +37,9 @@ float ScopeAGC_ComputeGain(float vd_mV);
 /**
  * @brief  获取加法器+滤波器链的频率响应修正系数
  * @param  freq_hz  信号频率 (Hz), 范围 [10k, 500k], 超范围钳位
- * @return H_chain 修正系数, 范围 [0.97, 1.06]
+ * @return H_chain 修正系数, 范围 [0.979, 1.058]
  *
- * 自然三次样条插值, 7节点, 归一化频率
+ * 自然三次样条插值, 7节点, 归一化频率 (2026-08-01更新)
  * 用途: V_original = V_measured / ScopeAGC_ComputeGain(Vd) / H_chain(f)
  */
 float ScopeCalib_GetHchain(float freq_hz);

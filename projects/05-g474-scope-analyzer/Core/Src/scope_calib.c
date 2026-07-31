@@ -1,34 +1,42 @@
 /**
  * @file    scope_calib.c
- * @brief   信号链路校准实现
+ * @brief   信号链路校准实现 — 2026-08-01 拟合方程更新
  * @author  jiujiu0415
- * @date    2026-07-31
+ * @date    2026-08-01
+ *
+ * 校准数据来源 (2026-08-01 重测):
+ *   1. 信号发生器 → 加法器 → 滤波器 → 输出峰峰值 (加法器另一路短路)
+ *      6 个输入电平 × 7 个频率 = 42 点, H_chain = Vout_filter / Vin_signal_gen
+ *   2. AD603-AGC 增益 vs 检波器输出 Vd
+ *      Vd ∈ [533, 722] mV, G ∈ [11.4, 63.1], 42 点
  */
 
 #include "scope_calib.h"
 
 /* ================================================================
  *  AGC 增益校准: G = f(Vd)
- *  二次多项式拟合, 42点实测
- *  R² = 0.99935, MAE = 0.305
+ *  二次多项式拟合, 42点实测 (2026-08-01 更新)
+ *  R² = 0.99971, MAE = 0.244, MaxE = 0.523
+ *  G 范围: [11.4, 63.1], Vd 范围: [533, 722] mV
  * ================================================================ */
 
 float ScopeAGC_ComputeGain(float vd_mV)
 {
     /* 钳位到标定范围 */
-    if (vd_mV < 470.0f) vd_mV = 470.0f;
-    if (vd_mV > 660.0f) vd_mV = 660.0f;
+    if (vd_mV < 533.0f) vd_mV = 533.0f;
+    if (vd_mV > 722.0f) vd_mV = 722.0f;
 
-    return 474.947464f
-         + (-1.315542f) * vd_mV
-         + 0.0009279000f * vd_mV * vd_mV;
+    return 570.75618007f
+         + (-1.45473655f) * vd_mV
+         + 0.00094137026f * vd_mV * vd_mV;
 }
 
 /* ================================================================
  *  加法器+滤波器链频响修正: H = spline(f)
- *  自然三次样条, 7节点, 归一化频率
- *  留一法交叉验证: MAE=0.0115
- *  H_chain 范围: [0.970, 1.057]
+ *  自然三次样条, 7节点, 归一化频率 fn = (f - 10k) / 490k ∈ [0, 1]
+ *  42点实测 (2026-08-01 更新), 6输入电平 × 7频率
+ *  H_chain 范围: [0.979, 1.058]
+ *  std 范围: [0.0024, 0.0082] (6个输入电平间的标准差)
  * ================================================================ */
 
 /* 样条节点 (归一化频率 fn = (f - 10k) / 490k) */
@@ -37,64 +45,59 @@ float ScopeAGC_ComputeGain(float vd_mV)
 #define SPLINE_SCALE (1.0f / 490000.0f)   /* 1/(FMAX-FMIN) */
 
 /* 归一化节点位置 */
-#define FN0  0.00000000f
-#define FN1  0.08163265f
-#define FN2  0.18367347f
-#define FN3  0.38775510f
-#define FN4  0.59183673f
-#define FN5  0.79591837f
-/* FN6 = 1.0 (no need for macro, last segment handled explicitly) */
+#define FN0  0.00000000f   /*  10 kHz */
+#define FN1  0.08163265f   /*  50 kHz */
+#define FN2  0.18367347f   /* 100 kHz */
+#define FN3  0.38775510f   /* 200 kHz */
+#define FN4  0.59183673f   /* 300 kHz */
+#define FN5  0.79591837f   /* 400 kHz */
+/* FN6 = 1.0 (500 kHz) — 末段显式处理, 不需要宏 */
 
 float ScopeCalib_GetHchain(float freq_hz)
 {
     /* 钳位 */
-    if (freq_hz <= SPLINE_FMIN) return 1.0360289f;
-    if (freq_hz >= SPLINE_FMAX) return 0.9702421f;
+    if (freq_hz <= SPLINE_FMIN) return 1.03522926f;
+    if (freq_hz >= SPLINE_FMAX) return 0.97868544f;
 
     /* 归一化频率 */
     float fn = (freq_hz - SPLINE_FMIN) * SPLINE_SCALE;
-    float dx, dx2;
+    float dx;
 
-    /* 段0: 10k-50kHz, fn ∈ [0, 0.0816] */
+    /* 段0: 10k-50kHz, fn ∈ [0, 0.08163265] — c2≈0 (natural边界) */
     if (fn <= FN1) {
         dx = fn - FN0;
-        dx2 = dx * dx;
-        return 1.0360289f + dx * (-0.0004647f + dx2 * 1.9690003f);
+        /* Horner: c0 + dx*(c1 + dx*(c2 + dx*c3)), c2=0 */
+        return 1.03522926f + dx * (0.03561475f + dx * dx * 0.08133061f);
     }
 
-    /* 段1: 50k-100kHz, fn ∈ [0.0816, 0.1837] */
+    /* 段1: 50k-100kHz, fn ∈ [0.08163265, 0.18367347] */
     if (fn <= FN2) {
         dx = fn - FN1;
-        dx2 = dx * dx;
-        return 1.0370621f + dx * (0.0388989f + dx * (0.4822041f + dx * -1.7546260f));
+        return 1.03818083f + dx * (0.03724069f + dx * (0.01991770f + dx * 0.63001516f));
     }
 
-    /* 段2: 100k-200kHz, fn ∈ [0.1837, 0.3878] */
+    /* 段2: 100k-200kHz, fn ∈ [0.18367347, 0.38775510] */
     if (fn <= FN3) {
         dx = fn - FN2;
-        dx2 = dx * dx;
-        return 1.0441879f + dx * (0.0824987f + dx * (-0.0549263f + dx * -0.2010046f));
+        return 1.04285767f + dx * (0.06098530f + dx * (0.21277948f + dx * -0.77313850f));
     }
 
-    /* 段3: 200k-300kHz, fn ∈ [0.3878, 0.5918] */
+    /* 段3: 200k-300kHz, fn ∈ [0.38775510, 0.59183673] */
     if (fn <= FN4) {
         dx = fn - FN3;
-        dx2 = dx * dx;
-        return 1.0570283f + dx * (0.0349647f + dx * (-0.1779903f + dx * -0.0305553f));
+        return 1.05759420f + dx * (0.05123201f + dx * (-0.26057062f + dx * 0.07045357f));
     }
 
-    /* 段4: 300k-400kHz, fn ∈ [0.5918, 0.7959] */
+    /* 段4: 300k-400kHz, fn ∈ [0.59183673, 0.79591837] */
     if (fn <= FN5) {
         dx = fn - FN4;
-        dx2 = dx * dx;
-        return 1.0564910f + dx * (-0.0415022f + dx * (-0.1966977f + dx * -0.7700261f));
+        return 1.05779597f + dx * (-0.04632032f + dx * (-0.21743579f + dx * -0.52939615f));
     }
 
-    /* 段5: 400k-500kHz, fn ∈ [0.7959, 1.0] */
+    /* 段5: 400k-500kHz, fn ∈ [0.79591837, 1.0] */
     {
         dx = fn - FN5;
-        dx2 = dx * dx;
-        return 1.0332837f + dx * (-0.2180002f + dx * (-0.6681422f + dx * 1.0912990f));
+        return 1.03478700f + dx * (-0.20121657f + dx * (-0.54155587f + dx * 0.88454125f));
     }
 }
 
