@@ -91,17 +91,6 @@ static float extract_phase(uint16_t bin, uint16_t fft_n)
 }
 
 /* ============================================================
- * 工具函数: 找数组最大值
- * ============================================================ */
-static float find_max_val(const float *buf, uint16_t len)
-{
-    float m = buf[0];
-    for (uint16_t i = 1; i < len; i++)
-        if (buf[i] > m) m = buf[i];
-    return m;
-}
-
-/* ============================================================
  * 工具函数: Hann 窗
  * w[n] = 0.5 * (1 − cos(2π·n/(N−1)))
  * ============================================================ */
@@ -293,27 +282,72 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     /* ═══════════════════════════════════════════════
      * 阶段 4: 基频检测 → 500Hz 吸附
      *
-     * 策略: 选最强峰 (非最低频峰)。
-     *   - 低频杂散/DC泄漏/电源纹波可能超过 5% 阈值,
-     *     但幅值远小于真实基频峰 → 选最强峰避免误检
-     *   - 附加子谐波检查: 若 f_best/2 处也有 ≥15% 峰,
-     *     说明最强峰可能是 H2, 改用 1/2 频率峰作为基频
+     * 策略: 谐波序列匹配
+     *   对每个候选峰, 统计其整数倍处是否有其他峰对齐(±2bin)。
+     *   匹配数最多的峰为基频 — 因为真正基波总有最多整数倍谐波。
+     *
+     *   即使某次谐波(H2/H3/H4)幅值超过基波, 基波仍有最多匹配:
+     *     f₁ 有 H2+H3+H4+H5... 多个匹配
+     *     H3 只有 H6+H9 少数匹配
+     *
+     *   低频杂散峰: 0匹配 → 自动排除
+     *   仅基波无谐波: 所有峰0匹配 → 退化为最强峰
      * ═══════════════════════════════════════════════ */
 
-    /* 4a: 找最强峰 (5kHz~500kHz) */
-    int   fund_idx = -1;
-    float fund_mag = 0.0f;
+    /* Step 1: 谐波序列匹配 — 每个峰作为候选基频, 统计其谐波匹配数 */
+    int   best_fund_idx = -1;
+    int   best_match    = -1;  /* -1 = 尚未找到有效候选 */
+    float best_mag      = 0.0f;
+
     for (uint8_t i = 0; i < peak_count; i++)
     {
-        float f = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
-        if (f >= 5000.0f && f <= 500000.0f && peak_mags[i] > fund_mag)
+        float fc = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
+
+        if (fc < 5000.0f || fc > 500000.0f) continue;
+
+        /* 统计 order 2~8 有多少个整数倍位置有其他峰对齐 */
+        int matches = 0;
+        for (uint8_t k = 2; k <= 8; k++)
         {
-            fund_mag = peak_mags[i];
-            fund_idx = (int)i;
+            float expected = fc * (float)k;
+            if (expected > fs_hz * 0.45f) break;  /* 超过90% Nyquist → 不搜 */
+
+            int expected_bin = (int)(expected / fs_hz
+                                     * (float)SCOPE_FFT_SIZE + 0.5f);
+            for (uint8_t j = 0; j < peak_count; j++)
+            {
+                if (j == i) continue;
+                int db = (int)peak_bins[j] - expected_bin;
+                if (db >= -2 && db <= 2) { matches++; break; }
+            }
+        }
+
+        /* 匹配数多者胜; 平局取幅值大者 */
+        if (matches > best_match ||
+            (matches == best_match && peak_mags[i] > best_mag))
+        {
+            best_match    = matches;
+            best_fund_idx = (int)i;
+            best_mag      = peak_mags[i];
         }
     }
 
-    if (fund_idx < 0)
+    /* Step 2: 未找到有效候选 → 退化为最强峰 (仅基波/噪声情形) */
+    if (best_fund_idx < 0)
+    {
+        best_mag = 0.0f;
+        for (uint8_t i = 0; i < peak_count; i++)
+        {
+            float f = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
+            if (f >= 5000.0f && f <= 500000.0f && peak_mags[i] > best_mag)
+            {
+                best_mag      = peak_mags[i];
+                best_fund_idx = (int)i;
+            }
+        }
+    }
+
+    if (best_fund_idx < 0)
     {
         r.confidence = 2;
         return r;
@@ -321,31 +355,9 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
     /* 抛物线插值修正基频 (吸附前) */
     float fund_freq_precise, fund_amp_raw;
-    parabola_interp(fft_mag, peak_bins[(uint8_t)fund_idx],
+    parabola_interp(fft_mag, peak_bins[(uint8_t)best_fund_idx],
                      &fund_freq_precise, &fund_amp_raw,
                      fs_hz, SCOPE_FFT_SIZE);
-
-    /* 4b: 子谐波检查 — 最强峰会不会是 H2?
-     *     若 f_best/2 处有 ≥15% 峰 → 改用 1/2 频率峰作为基频 */
-    {
-        int half_bin = (int)(fund_freq_precise * 0.5f / fs_hz
-                             * (float)SCOPE_FFT_SIZE + 0.5f);
-        for (uint8_t i = 0; i < peak_count; i++)
-        {
-            int db = (int)peak_bins[i] - half_bin;
-            if (db >= -2 && db <= 2
-                && peak_mags[i] >= fund_mag * 0.15f
-                && (int)i != fund_idx)
-            {
-                /* 找到子谐波 → 改用此峰作为基频 */
-                fund_idx = (int)i;
-                parabola_interp(fft_mag, peak_bins[i],
-                                 &fund_freq_precise, &fund_amp_raw,
-                                 fs_hz, SCOPE_FFT_SIZE);
-                break;
-            }
-        }
-    }
 
     r.f1_raw_hz = fund_freq_precise;
 
@@ -361,7 +373,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     /* ═══════════════════════════════════════════════
      * 阶段 5: 基波相位提取 (在原始 bin 处)
      * ═══════════════════════════════════════════════ */
-    float fund_phase_raw = extract_phase(peak_bins[(uint8_t)fund_idx], SCOPE_FFT_SIZE);
+    float fund_phase_raw = extract_phase(peak_bins[(uint8_t)best_fund_idx], SCOPE_FFT_SIZE);
 
     /* ═══════════════════════════════════════════════
      * 阶段 6: 谐波搜索 (f_k = k × f₁ 附近)
@@ -369,7 +381,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
     r.harmonic_count = 0;
     uint8_t peak_claimed[32] = {0};
-    peak_claimed[(uint8_t)fund_idx] = 1;
+    peak_claimed[(uint8_t)best_fund_idx] = 1;
 
     for (uint8_t order = 2; order <= (SCOPE_MAX_HARM + 1); order++)
     {
