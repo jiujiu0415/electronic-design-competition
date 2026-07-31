@@ -14,6 +14,7 @@
 
 #include "scope_fft.h"
 #include "scope_calib.h"
+#include "arm_math.h"
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
