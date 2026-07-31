@@ -292,21 +292,24 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
     /* ═══════════════════════════════════════════════
      * 阶段 4: 基频检测 → 500Hz 吸附
+     *
+     * 策略: 选最强峰 (非最低频峰)。
+     *   - 低频杂散/DC泄漏/电源纹波可能超过 5% 阈值,
+     *     但幅值远小于真实基频峰 → 选最强峰避免误检
+     *   - 附加子谐波检查: 若 f_best/2 处也有 ≥15% 峰,
+     *     说明最强峰可能是 H2, 改用 1/2 频率峰作为基频
      * ═══════════════════════════════════════════════ */
 
-    float max_mag  = find_max_val(peak_mags, peak_count);
-    float threshold = max_mag * SCOPE_PEAK_THRESH;
-
-    /* 找最低频率的显著峰作为基频候选 */
-    int   fund_idx  = -1;
-    float fund_freq = 1e9f;
+    /* 4a: 找最强峰 (5kHz~500kHz) */
+    int   fund_idx = -1;
+    float fund_mag = 0.0f;
     for (uint8_t i = 0; i < peak_count; i++)
     {
         float f = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
-        if (peak_mags[i] >= threshold && f < fund_freq && f >= 5000.0f)
+        if (f >= 5000.0f && f <= 500000.0f && peak_mags[i] > fund_mag)
         {
-            fund_freq = f;
-            fund_idx  = (int)i;
+            fund_mag = peak_mags[i];
+            fund_idx = (int)i;
         }
     }
 
@@ -321,6 +324,28 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     parabola_interp(fft_mag, peak_bins[(uint8_t)fund_idx],
                      &fund_freq_precise, &fund_amp_raw,
                      fs_hz, SCOPE_FFT_SIZE);
+
+    /* 4b: 子谐波检查 — 最强峰会不会是 H2?
+     *     若 f_best/2 处有 ≥15% 峰 → 改用 1/2 频率峰作为基频 */
+    {
+        int half_bin = (int)(fund_freq_precise * 0.5f / fs_hz
+                             * (float)SCOPE_FFT_SIZE + 0.5f);
+        for (uint8_t i = 0; i < peak_count; i++)
+        {
+            int db = (int)peak_bins[i] - half_bin;
+            if (db >= -2 && db <= 2
+                && peak_mags[i] >= fund_mag * 0.15f
+                && (int)i != fund_idx)
+            {
+                /* 找到子谐波 → 改用此峰作为基频 */
+                fund_idx = (int)i;
+                parabola_interp(fft_mag, peak_bins[i],
+                                 &fund_freq_precise, &fund_amp_raw,
+                                 fs_hz, SCOPE_FFT_SIZE);
+                break;
+            }
+        }
+    }
 
     r.f1_raw_hz = fund_freq_precise;
 
