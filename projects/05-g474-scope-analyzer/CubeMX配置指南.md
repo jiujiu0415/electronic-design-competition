@@ -125,11 +125,18 @@ Rank 配置（Number Of Conversion = **1**）：
 | 参数 | 值 | HAL 常量 | 寄存器位 |
 |------|-----|----------|---------|
 | **Dual regular conversion mode** | **Interleaved mode only** | `ADC_DUALMODE_INTERL` | DUAL[4:0]=00111 |
-| **DMA Access Mode** | **DMA mode 2 (12/10/8-bit, 1 word per conversion pair)** | `ADC_DMAACCESSMODE_12_10_BITS` | MDMA[1:0]=11 |
+| **DMA Access Mode** | **Enabled** | — | MDMA[1:0]=11（自动根据 DMA 位宽设定） |
 | **Delay between two sampling phases** | **11 ADC clock cycles** | `ADC_TWOSAMPLINGDELAY_11CYCLES` | DELAY[3:0]=1011 |
 
 > **Delay 计算**：触发周期 500ns → 理想交替间距 = 250ns。
 > 250ns / (1/42.5MHz) = 10.6 cycles → 取 11 cycles = 258.8ns（偏差 8.8ns 可忽略）。
+
+> **MDMA 模式说明**：CubeMX 中 DMA Access Mode 只有 Enabled/Disabled。
+> MDMA 具体是 mode 1（16-bit 交替）还是 mode 2（32-bit 打包）由 **DMA Data Width** 自动决定：
+> - DMA Data Width = **Half Word** → CDR 按 16-bit 交替读 → uint16_t[8192]
+> - DMA Data Width = **Word** → CDR 按 32-bit 打包读 → uint32_t[4096]（每字含 ADC1[15:0]+ADC2[31:16]）
+>
+> **本文选择 Word (32-bit)**，配合后面 DMA Settings 一致。
 
 ### 4.4 ADC2 参数（Slave）
 
@@ -363,7 +370,7 @@ Library search path: `../Drivers/CMSIS/DSP/Lib/GCC`
 | 检查项 | 文件/位置 | 期望值 |
 |--------|----------|--------|
 | ADC1 Dual Mode | `MX_ADC1_Init()` | `Multimode = ADC_DUALMODE_INTERL` |
-| ADC1 MDMA | `MX_ADC1_Init()` | `DMAAccessMode = ADC_DMAACCESSMODE_12_10_BITS` |
+| ADC1 MDMA | `MX_ADC1_Init()` | `DMAAccessMode = ADC_DMAACCESSMODE_12_10_BITS` (DMA Access Mode=Enabled 时自动设为 mode 2) |
 | ADC1 TwoSamplingDelay | `MX_ADC1_Init()` | `TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_11CYCLES` |
 | ADC1 DMA Word | `MX_DMA_Init()` | `hdma_adc1.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD` |
 | TIM2 ARR=84 | `MX_TIM2_Init()` | `htim2.Init.Period = 84` |
