@@ -87,7 +87,7 @@ u_J (200mVpp) ─────────┘                                    
 | 难点 | 描述 | 方案思路 |
 |------|------|---------|
 | **干扰抑制** | 1MHz+ 干扰（200mVpp） | **硬件+软件双层**：LPF 700kHz + FFT 整数倍验证 |
-| **高速采样** | 500kHz 信号需 ≥1MSPS，分辨率 500Hz | ADC1+2交替 4MSPS + **8192** 点 FFT (Nyquist=2MHz, 分辨率 488Hz) |
+| **高速采样** | 500kHz 信号需 ≥1MSPS，分辨率 500Hz | ADC1 独立 2MSPS + 4096 点 FFT (Nyquist=1MHz, 分辨率 488Hz) |
 | **小信号放大** | 50mVpp 信号在 12-bit ADC 仅 ~62 LSB | AD603 AGC 自动增益到 3Vpp |
 | **AGC增益标定** | 增益非线性，非简单 G=k/Vd | **42点实测二次拟合** G=f(Vd)，R²=0.9993 |
 | **大屏驱动** | 现有 2.4" ST7789 不满足 ≥6" 要求 | 串口 HMI 屏（UART）或并口大屏 |
@@ -149,9 +149,9 @@ projects/05-g474-scope-analyzer/
 |------|------|------|
 | 1 | 选题确认 + 题目文字提取 + 难点分析 | ✅ 2026-07-29 |
 | 2 | 采样方案论证 | ✅ v1→v2→v3→v4 |
-| 3 | CubeMX 工程创建 + 外设配置 | 🟢 **已更新** Dual Interleaved 4MSPS 配置指南 |
-| 4 | ADC 采集驱动 | 🟢 **已重构** scope_adc.c/h v3 |
-| 5 | FFT 分析 + 时域参数 | 🟡 FFT 8192 需适配 (scope_fft.c) |
+| 3 | CubeMX 工程创建 + 外设配置 | 🟢 独立双 ADC 配置指南 |
+| 4 | ADC 采集驱动 | 🟢 scope_adc.c/h |
+| 5 | FFT 分析 + 时域参数 | 🟡 scope_fft.c (4096 FFT 待适配 500Hz吸附) |
 | 6 | AGC 增益校准 scope_calib.c | 🟢 **已完成** G=f(Vd) R²=0.9994 |
 | 7 | 加法器+滤波器频响修正 H_chain(f) | 🟢 **已完成** 三次样条 scope_calib.c |
 | 8 | 500Hz 基频吸附 | 🔲 scope_fft.c |
