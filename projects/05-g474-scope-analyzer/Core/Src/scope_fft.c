@@ -152,8 +152,8 @@ static float calibrate_phase_rad(float phase_measured_rad, float freq_hz)
     float phi_orig = phase_measured_rad - phi_lpf;
 
     /* 规范化到 [−π, +π] */
-    if      (phi_orig >  PI_F) phi_orig -= 2.0f * PI;
-    else if (phi_orig < -PI_F) phi_orig += 2.0f * PI;
+    if      (phi_orig >  PI) phi_orig -= 2.0f * PI;
+    else if (phi_orig < -PI) phi_orig += 2.0f * PI;
 
     return phi_orig;
 }
