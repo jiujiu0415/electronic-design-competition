@@ -1,16 +1,13 @@
 /**
- * scope_fft.h — FFT 频谱分析 + 时域参数测量 + 干扰识别 + 交叉验证
+ * scope_fft.h — FFT 频谱分析 + 三校准集成
  *
- * 输入: ADC1 信号缓冲 (uint16_t[4096]) + AGC 增益
- * 输出: 基频 f₁、Vpp、Vrms、谐波频率+幅值+相位
+ * 输入: ADC1 4096点信号缓冲 + AGC增益 G
+ * 输出: 原始域 mV (基频/谐波/Vpp/Vrms), 频率 →500Hz吸附, 相位 →φ_LPF修正
  *
- * 依赖: CMSIS-DSP (arm_math.h), scope_adc.h
+ * FFT: 4096点, Hann窗, Fs=2.0MSPS, 分辨率 488.28Hz
+ * 校准: ① ÷G(AGC) ② ÷H_chain(f) ③ −φ_LPF(f)
  *
- * FFT 参数:
- *   N = 4096, Fs = 2.0 MSPS → 频率分辨率 = 488 Hz
- *   窗函数: Hann (幅度精度优先)
- *   峰值检测: 抛物线插值修正
- *   基频吸附: round(f₁_raw / 500) × 500
+ * 依赖: CMSIS-DSP (arm_math.h), scope_calib.h, scope_adc.h
  */
 
 #ifndef __SCOPE_FFT_H
@@ -23,80 +20,61 @@
  * 宏定义
  * ============================================================ */
 
-#define SCOPE_FFT_SIZE    4096
-#define SCOPE_FS          2000000.0f
-#define SCOPE_BIN_HZ      (SCOPE_FS / SCOPE_FFT_SIZE)  /* 488.28 Hz */
-#define SCOPE_MAX_HARM     8          /* 最多检测 8 次谐波 */
-#define SCOPE_PEAK_THRESH  0.05f      /* 峰值阈值: 低于基频5%的忽略 */
-#define SCOPE_MIN_BIN       2          /* 跳过 bin 0/1 (DC+近DC) */
+#define SCOPE_FFT_SIZE        4096
+#define SCOPE_FS              2000000.0f
+#define SCOPE_BIN_HZ          (SCOPE_FS / SCOPE_FFT_SIZE)   /* 488.28 Hz */
+#define SCOPE_MAX_HARM          8       /* 最多检测 8 次谐波 */
+#define SCOPE_PEAK_THRESH       0.05f   /* 相对基频幅值阈值 */
+#define SCOPE_MIN_BIN           2       /* 跳过 bin 0(DC)+1(直流泄漏区) */
 
-/* 交叉验证阈值 */
-#define SCOPE_VERIFY_PARSEVAL_TOL  0.15f  /* Parseval 一致性: 15% */
-#define SCOPE_VERIFY_VPP_TOL       0.20f  /* Vpp 交叉校验: 20% */
-#define SCOPE_VERIFY_AMP_SUS_THRESH 0.15f /* 谐波幅值可疑阈值: 15% */
-#define SCOPE_VERIFY_AMP_MATCH_TOL  0.20f /* 干扰幅值匹配容差: 20% */
+/* 500Hz 吸附 (题目约束: f₁ = N×500Hz) */
+#define SCOPE_FREQ_STEP         500.0f
 
-/* AGC 参数 */
-#define SCOPE_AGC_TARGET_VPP  3.00f    /* AD603 AGC 目标输出 Vpp (v4架构) */
-#define SCOPE_AGC_GAIN_MIN    1.0f     /* AGC 增益下限 */
-#define SCOPE_AGC_GAIN_MAX    100.0f   /* AGC 增益上限 (~40dB) */
-#define SCOPE_INTERFERENCE_VPP 0.20f   /* 干扰 200mVpp (已知固定值) */
-#define SCOPE_INTERFERENCE_VPEAK 0.10f /* 干扰 100mV peak */
+/* 谐波搜索窗口 (在整数倍位置 ±N bin 内搜索) */
+#define SCOPE_HARM_SEARCH_BINS  2
+
+/* ADC 参考 */
+#define SCOPE_ADC_VREF          3.30f
+#define SCOPE_ADC_MAX           4096.0f
 
 /* ============================================================
- * 置信度
- * ============================================================ */
-typedef enum {
-    SCOPE_CONFIDENCE_HIGH   = 0,
-    SCOPE_CONFIDENCE_MEDIUM = 1,
-    SCOPE_CONFIDENCE_LOW    = 2
-} ScopeConfidence;
-
-/* ============================================================
- * 频谱分量 (新增相位 + 干扰标记)
+ * 频谱分量
  * ============================================================ */
 typedef struct {
-    float freq_hz;            /* 频率 (Hz) */
-    float amplitude;          /* 幅度 (Vpeak, 正弦波峰值) */
-    float phase_rad;          /* 相位 (radians, 相对分析窗起点) */
-    uint16_t bin;             /* FFT bin 索引 */
-    uint8_t is_interference;  /* 1 = 识别为干扰分量 */
+    float freq_hz;          /* 频率 (Hz) — 谐波吸附到 f₁ 的整数倍 */
+    float vpeak_mV;         /* 幅度 (mVpeak) — 原始域, H_chain+AGC 已修正 */
+    float phase_rad;        /* 相位 (rad) — 原始域, φ_LPF 已修正 */
+    uint16_t bin;           /* FFT bin 索引 */
+    uint8_t  is_interference; /* 干扰标记 */
 } ScopeHarmonic;
 
 /* ============================================================
- * 完整测量结果
+ * 完整测量结果 — 所有电压值均为原始输入域 mV
  * ============================================================ */
 typedef struct {
-    /* ── 时域原始参数 (ADC1, 含干扰+偏置) ── */
-    float vpp;                /* 峰峰值 (V), 总信号含干扰 */
-    float vrms;               /* 真有效值 (V), 总信号含干扰 */
-    float vdc;                /* 直流偏置 (V) */
+    /* ── 频率 ── */
+    float f1_hz;            /* 基频 (Hz), 500Hz吸附后, 误差 0 */
+    float f1_raw_hz;        /* 基频 (Hz), 吸附前原始值 (调试用) */
+    float bin_resolution;   /* FFT bin 分辨率 (Hz) */
 
-    /* ── 频谱反推 (u_b 纯有用信号, 不含干扰) ── */
-    float vpp_u_b;            /* u_b Vpp, 从频谱分量重建 */
-    float vrms_u_b;           /* u_b Vrms, Parseval 定理 */
+    /* ── 电压时域 (原始域 mV) ── */
+    float vpp_mV;           /* Vpp, 时域 peak-to-peak */
+    float vrms_mV;          /* Vrms, 真有效值 */
+    float vdc_mV;           /* ADC 直流偏置 */
 
-    /* ── 检波器 (ADC2) ── */
-    float vpp_envelope;       /* ADC2 检波器总 Vpp (AGC 前) */
-
-    /* ── AGC + 干扰估计 ── */
-    float agc_gain;                  /* 估计的 AGC 线性增益 */
-    float interference_expected_amp; /* 干扰预期 Vpeak (ADC域, AGC后) */
-    uint8_t interference_peaks;      /* 检测到的干扰谱线数量 */
-
-    /* ── 基频 ── */
-    float fundamental_freq;   /* 基频 (Hz) */
-    float fundamental_amp;    /* 基频幅度 (Vpeak) */
+    /* ── 基波 ── */
+    float fund_vpeak_mV;    /* 基波 Vpeak (mV), 已修正 */
+    float fund_phase_rad;   /* 基波相位 (rad), φ_LPF 已修正 */
 
     /* ── 谐波 ── */
     ScopeHarmonic harmonics[SCOPE_MAX_HARM];
     uint8_t harmonic_count;
 
-    /* ── 置信度 ── */
-    ScopeConfidence confidence;
+    /* ── AGC ── */
+    float agc_gain;         /* AGC 线性增益 G (来自 ScopeAGC_ComputeGain) */
 
-    /* ── 调试 ── */
-    float freq_resolution;    /* 实际频率分辨率 (Hz) */
+    /* ── 置信度 ── */
+    uint8_t confidence;     /* 0=HIGH (无干扰/验证通过), 1=MEDIUM, 2=LOW */
 } ScopeResult;
 
 /* ============================================================
@@ -104,25 +82,35 @@ typedef struct {
  * ============================================================ */
 
 /**
- * ScopeFFT_Init — 初始化 FFT 实例 (4096 点, 只调用一次)
+ * ScopeFFT_Init — 初始化 FFT 实例 (4096点, 启动时调用一次)
  */
 void ScopeFFT_Init(void);
 
 /**
- * ScopeFFT_AnalyzeSimple — 单 ADC 完整分析
+ * ScopeFFT_Analyze — 完整分析 (单ADC, 三校准集成)
  *
- * @param signal_buf  ADC1 信号原始数据 (uint16_t[4096])
- * @param len         数据长度 (= 4096)
+ * 内部执行:
+ *   ① 时域 Vdc/Vpp/Vrms
+ *   ② 去直流 → Hann 窗 → FFT → 幅度谱
+ *   ③ 峰值检测 → 基频 → 500Hz 吸附
+ *   ④ 谐波搜索 (f₁整数倍 ±2bin)
+ *   ⑤ 抛物线插值修正 (频率+幅度)
+ *   ⑥ 三校准链: ÷G → ÷H_chain(f) → −φ_LPF(f)
+ *   ⑦ 转换为 mV 原始域
+ *
+ * @param signal_buf  ADC1 原始数据 uint16_t[4096]
+ * @param len         数据长度 (必须 = 4096)
  * @param fs_hz       采样率 (= 2.0e6)
  * @param agc_gain    AGC 线性增益 (来自 ScopeAGC_ComputeGain)
- * @return            测量结果 (含基频/谐波/Vpp/Vrms)
+ * @return            完整测量结果 (mV 原始域)
  */
-ScopeResult ScopeFFT_AnalyzeSimple(const uint16_t *signal_buf,
-                                    uint16_t len, float fs_hz,
-                                    float agc_gain);
+ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
+                              uint16_t len,
+                              float fs_hz,
+                              float agc_gain);
 
 /**
- * ScopeFFT_Print — 串口打印测量结果
+ * ScopeFFT_Print — 串口打印结果 (huart2)
  */
 void ScopeFFT_Print(const ScopeResult *r);
 

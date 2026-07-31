@@ -93,7 +93,8 @@ u_J (200mVpp) ─────────┘                                    
 | **大屏驱动** | 现有 2.4" ST7789 不满足 ≥6" 要求 | 串口 HMI 屏（UART）或并口大屏 |
 | **真有效值** | 不是 peak/√2，是真正的 RMS 积分 | Parseval：√(Σ Vpeak[k]²/2) |
 | **周期截取** | 显示精确 1/3 周期 | 500Hz吸附 f₁=N×500 → T=1/f₁ 精确可算 |
-| **加法器/滤波器频响** | 链增益不平坦（0.97~1.06） | 三组实测数据拟合 H_chain(f) 修正 |
+| **加法器/滤波器频响** | 链增益不平坦（0.97~1.06） | 三次样条 H_chain(f) 修正 |
+| **滤波器相位偏移** | LPF对谐波产生不同相移→波形失真 | 巴特沃斯电路模型 φ_LPF(f), f₀=735.8kHz |
 
 ---
 
@@ -101,14 +102,16 @@ u_J (200mVpp) ─────────┘                                    
 
 | 模块 | 来源 | 复用 | 说明 |
 |------|------|------|------|
-| ADC + DMA + FFT | 04 adc_dual | 🟡 **已更新** Dual Interleaved 4MSPS + ADC3 | G474 Interleaved 模式 |
-| 参数提取 (Vpp/Vrms/f₁) | 04 adc_dual | 🟡 重构计算链 | ÷G÷H_chain + 时域重建 |
+| ADC + DMA + FFT | 04 adc_dual | 🟢 **已实现** ADC1 2MSPS DMA | 独立双ADC, 4096 FFT |
+| 参数提取 (Vpp/Vrms/f₁) | 04 adc_dual | 🟢 **已实现** 三校准链 | ÷G÷H_chain−φ_LPF |
 | 频谱峰值检测 | 04 adc_dual | 🟢 已实现 | 抛物线插值 + 相位提取 |
-| 干扰识别 + 交叉验证 | — | 🟡 简化为双层 | LPF硬件 + 整数倍验证 |
-| AGC 增益校准 | — | 🟢 已拟合 | G=f(Vd) R²=0.9993 scope_calib.c |
+| 干扰识别 | — | 🟢 已实现 | LPF硬件 + 整数倍验证 |
+| AGC 增益校准 | — | 🟢 已拟合 | G=f(Vd) R²=0.9994 scope_calib.c |
 | 加法器/滤波器修正 | — | 🟢 已拟合 | H_chain(f) 三次样条 scope_calib.c |
+| LPF 相位修正 | — | 🟢 已推导 | φ_LPF(f) 巴特沃斯电路模型 scope_calib.c |
+| 500Hz 基频吸附 | — | 🟢 已实现 | scope_fft.c |
 | 画线算法 (Bresenham) | 04 st7789 | 🔲 待复用 | 波形/谱线绘制 |
-| 模拟开关控制 | — | 🟢 **已新增** GPIO PA4 | scope_adc.c |
+| 模拟开关控制 | — | 🟢 已实现 | GPIO PA4 scope_adc.c |
 | 屏幕驱动 | 04 st7789 | ❌ 不适用 | 2.4"→≥6"，协议不同 |
 
 ---
@@ -131,14 +134,14 @@ projects/05-g474-scope-analyzer/
 │   └── 裸芯片硬件注意.md          ← NUCLEO→裸板差异
 ├── Core/
 │   ├── Inc/
-│   │   ├── scope_adc.h           ← v3: ADC1+2交替 4MSPS + ADC3 检波器 + GPIO模拟开关
-│   │   ├── scope_fft.h           ← FFT 8192 分析 + ScopeResult 结构
-│   │   └── scope_calib.h         ← AGC 增益校准 + 加法器/滤波器频响修正
+│   │   ├── scope_adc.h           ← ADC1 2MSPS + ADC2 检波器 + GPIO模拟开关
+│   │   ├── scope_fft.h           ← FFT 4096 分析 + ScopeResult (mV输出)
+│   │   └── scope_calib.h         ← AGC增益 + H_chain幅频 + φ_LPF相频 (三校准)
 │   └── Src/
-│       ├── scope_adc.c           ← v3: Dual Interleaved DMA 32-bit CDR + ADC3 Polling
-│       ├── scope_fft.c           ← FFT 8192 + 500Hz吸附 + H_chain修正 + 时域重建
-│       ├── scope_calib.c         ← 检波器→AGC增益 二次拟合 + 三次样条频响
-│       └── main-integration-reference.c  ← v3 main.c 集成参考 (含 unpack+ADC3+开关)
+│       ├── scope_adc.c           ← ADC1 DMA + ADC2软件触发 + PA4开关
+│       ├── scope_fft.c           ← 完整分析: 500Hz吸附 + 三校准链 → mV
+│       ├── scope_calib.c         ← 二次拟合(AGC) + 三次样条(H_chain) + 电路模型(φ_LPF)
+│       └── main-integration-reference.c  ← main.c 集成参考 (最新API)
 ```
 
 ---
@@ -151,13 +154,12 @@ projects/05-g474-scope-analyzer/
 | 2 | 采样方案论证 | ✅ v1→v2→v3→v4 |
 | 3 | CubeMX 工程创建 + 外设配置 | 🟢 独立双 ADC 配置指南 |
 | 4 | ADC 采集驱动 | 🟢 scope_adc.c/h |
-| 5 | FFT 分析 + 时域参数 | 🟡 scope_fft.c (4096 FFT 待适配 500Hz吸附) |
+| 5 | FFT 分析 + 500Hz吸附 + 三校准集成 | 🟢 **已完成** scope_fft.c (4096点, mV输出) |
 | 6 | AGC 增益校准 scope_calib.c | 🟢 **已完成** G=f(Vd) R²=0.9994 |
 | 7 | 加法器+滤波器频响修正 H_chain(f) | 🟢 **已完成** 三次样条 scope_calib.c |
-| 8 | LPF 相位校准 φ_LPF(f) | 🟢 **已完成** 萨伦-基电路模型 scope_calib.c |
-| 9 | 500Hz 基频吸附 | 🔲 scope_fft.c |
-| 10 | 模拟开关 GPIO 控制 | 🟢 **已完成** PA4 scope_adc.c |
-| 11 | 烧录验证 | 🔲 |
-| 12 | 要求1/2/3 完整测试 | 🔲 |
-| 13 | 大屏驱动 + 波形显示 | 🔲 |
-| 14 | 设计报告撰写 | 🔲 |
+| 8 | LPF 相位校准 φ_LPF(f) | 🟢 **已完成** 巴特沃斯电路模型 scope_calib.c |
+| 9 | 模拟开关 GPIO 控制 | 🟢 **已完成** PA4 scope_adc.c |
+| 10 | 烧录验证 | 🔲 |
+| 11 | 要求1/2/3 完整测试 | 🔲 |
+| 12 | 大屏驱动 + 波形显示 | 🔲 |
+| 13 | 设计报告撰写 | 🔲 |

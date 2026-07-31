@@ -7,7 +7,7 @@
  * 包含三组校准:
  *   1. ScopeAGC_ComputeGain()   — 检波器直流 → AGC放大倍数 (二次拟合)
  *   2. ScopeCalib_GetHchain()   — 频率 → 加法器+滤波器链增益 (三次样条)
- *   3. ScopeCalib_GetLPFPhase() — 频率 → LPF相位偏移 (萨伦-基电路模型)
+ *   3. ScopeCalib_GetLPFPhase() — 频率 → LPF相位偏移 (巴特沃斯电路模型, Sallen-Key拓扑)
  */
 
 #ifndef SCOPE_CALIB_H

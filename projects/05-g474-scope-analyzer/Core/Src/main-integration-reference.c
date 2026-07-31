@@ -1,14 +1,31 @@
 /**
- * main.c 集成参考 — 周期信号测量分析装置
+ * main.c 集成参考 — 周期信号测量分析装置 (最终方案)
  *
- * ADC1 (PA0): 信号 2MSPS, DMA 4096点
- * ADC2 (PA1): 检波器直流, 软件触发
- * GPIO PA4:   模拟开关
+ * ============================================================
+ * 电路连接:
+ *   PA0 = ADC1_IN1   → 信号 (AGC+DC偏置后, 0~3.3V 单极性)
+ *   PA1 = ADC2_IN2   → 检波器直流
+ *   PA2 = USART2_TX   → 串口打印
+ *   PA4 = GPIO Output → 模拟开关 (LOW=断u_J, HIGH=合u_J)
  *
- * 用法: 复制对应代码块到 CubeIDE 生成的 main.c 的 USER CODE 区域
+ * ============================================================
+ * 信号链:
+ *   u_b(+u_J) → 加法器 → LPF(700kHz) → AGC(×G→3Vpp) → DC偏置 → ADC1
+ *                                         │
+ *                                         └→ 检波器 → ADC2
  *
- * 需要的文件:
- *   scope_adc.h/c, scope_fft.h/c, scope_calib.h/c
+ * ============================================================
+ * 三校准:
+ *   ① G = f(Vd)        — 检波器直流 → AGC 增益
+ *   ② H_chain(f)       — 加法器+LPF 幅频修正
+ *   ③ φ_LPF(f)         — LPF 相位修正
+ *
+ * ============================================================
+ * 输出: 全部 mV 原始域 (u_b 输入端)
+ *
+ * 需要的源文件:
+ *   scope_adc.c,  scope_fft.c,  scope_calib.c
+ *   scope_adc.h,  scope_fft.h,  scope_calib.h
  */
 
 /* ═══════════════════════════════════════════════════════════
@@ -37,46 +54,57 @@ static char uart_buf[256];
  * ③ USER CODE BEGIN 0 — 辅助函数
  * ═══════════════════════════════════════════════════════════
 
-static void uart_print(const char *str)
+static void uart_send(const char *s)
 {
-    HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 1000);
+    HAL_UART_Transmit(&huart2, (uint8_t *)s, strlen(s), 1000);
 }
 
+/**
+ * do_measurement — 单次完整测量
+ *
+ * 流程:
+ *  ① 启动 ADC1 DMA (4096点 @2MSPS = 2.048ms)
+ *  ② 等待 DMA 完成
+ *  ③ 读 ADC2 → Vd → AGC 增益 G
+ *  ④ FFT 分析 (含500Hz吸附 + 三校准)
+ *  ⑤ 串口输出 (mV 原始域)
+ */
 static void do_measurement(void)
 {
-    // ── 1. 启动采集 ──
+    /* ── ① 启动采集 ── */
     ScopeADC_Restart();
 
-    // ── 2. 等待 DMA (4096点 @2MSPS = 2.05ms) ──
-    uint32_t timeout = 100000;
-    while (!ScopeADC_Ready() && --timeout);
-    if (!timeout) {
-        uart_print("[ERR] ADC timeout!\r\n");
+    /* ── ② 等待 DMA 完成 (超时 ≈100ms) ── */
+    uint32_t to = 100000;
+    while (!ScopeADC_Ready() && --to) { __NOP(); }
+    if (!to) {
+        uart_send("[ERR] ADC timeout!\r\n");
         return;
     }
 
-    // ── 3. 读检波器 ──
+    /* ── ③ 读检波器 → AGC 增益 ── */
     uint16_t vd_raw = ScopeADC_ReadEnvelope();
     float vd_mV = (float)vd_raw * 3300.0f / 4096.0f;
-
-    // ── 4. AGC 增益 ──
     float G = ScopeAGC_ComputeGain(vd_mV);
-    snprintf(uart_buf, sizeof(uart_buf),
-             "[AGC] Vd=%.1fmV  G=%.2f\r\n", vd_mV, G);
-    uart_print(uart_buf);
 
-    // ── 5. FFT 分析 ──
+    /* ── ④ FFT 分析 (内部集成三校准) ── */
     uint16_t *signal = ScopeADC_GetSignalBuffer();
-    ScopeResult r = ScopeFFT_AnalyzeSimple(signal, 4096,
-                                            ScopeADC_GetSampleRate(), G);
+    ScopeResult r = ScopeFFT_Analyze(signal, SCOPE_FFT_SIZE,
+                                      ScopeADC_GetSampleRate(), G);
 
-    // ── 6. H_chain 频响修正 ──
-    float H1 = ScopeCalib_GetHchain(r.fundamental_freq);
-    // Vpp_original = Vpp_preAGC / H1
-    // Vpeak_original[k] = Vpeak_preAGC[k] / ScopeCalib_GetHchain(k * f1)
+    /* ── ⑤ 串口输出 ── */
+    snprintf(uart_buf, sizeof(uart_buf),
+             "\r\n[AGC] Vd=%.1fmV  G=%.2f\r\n", vd_mV, G);
+    uart_send(uart_buf);
 
-    // ── 7. 输出 ──
     ScopeFFT_Print(&r);
+
+    /* ── 验证: 修正后基波相位应≈0 (信号源相位=0) ── */
+    snprintf(uart_buf, sizeof(uart_buf),
+             "  Phase check: |phi_fund|=%.3f rad (%.1f deg) [expect ~0]\r\n",
+             fabsf(r.fund_phase_rad),
+             fabsf(r.fund_phase_rad) * 180.0f / 3.14159265f);
+    uart_send(uart_buf);
 }
 
  * ═══════════════════════════════════════════════════════════ */
@@ -86,10 +114,16 @@ static void do_measurement(void)
  * ④ USER CODE BEGIN 2 — 初始化
  * ═══════════════════════════════════════════════════════════
 
-  uart_print("\r\n=== Scope Analyzer — ADC1 2MSPS + ADC2 Envelope ===\r\n");
+  uart_send("\r\n========================================\r\n");
+  uart_send(" Scope Analyzer — STM32G474\r\n");
+  uart_send(" ADC1 2MSPS + 4096 FFT\r\n");
+  uart_send(" Calib: AGC + H_chain + phi_LPF\r\n");
+  uart_send("========================================\r\n");
+
   ScopeFFT_Init();
   ScopeADC_Init();
-  uart_print("Ready.\r\n");
+
+  uart_send("Ready.\r\n");
 
  * ═══════════════════════════════════════════════════════════ */
 
@@ -100,16 +134,17 @@ static void do_measurement(void)
 
   while (1)
   {
-      // 要求1/2 (无干扰): 开关断开
+      /* ── 要求1/2: 无干扰, 模拟开关断开 ── */
       ScopeADC_SwitchOpen();
+      HAL_Delay(10);
       do_measurement();
-      HAL_Delay(1000);
+      HAL_Delay(2000);
 
-      // 要求3 (有干扰): 开关闭合
+      /* ── 要求3: 有干扰, 模拟开关闭合 ── */
       // ScopeADC_SwitchClose();
-      // HAL_Delay(1);
+      // HAL_Delay(10);
       // do_measurement();
-      // HAL_Delay(1000);
+      // HAL_Delay(2000);
   }
 
  * ═══════════════════════════════════════════════════════════ */
