@@ -89,6 +89,10 @@ Pinout & Configuration → Analog → **ADC1**:
 Pinout & Configuration → Analog → **ADC2**:
 - IN1 (PA0) → **IN1 Single-ended**（和 ADC1 同一个引脚）
 
+> **验证 PA0**：在 Pinout 视图点击 PA0，右侧应同时列出 `ADC1_IN1` 和 `ADC2_IN1`。
+
+> **ADC2 如何成为 Slave？** 不需要在 ADC2 单独设置。只要 ADC1 的 ADCs_Common_Settings 里选了 "Interleaved mode only"，CubeMX 自动把 ADC2 当作 Slave。ADC2 的 External Trigger 等选项会被自动隐藏——这就是它已成为 Slave 的标志。
+
 ### 4.2 ADC1 参数（Master）
 
 ADC1 → **Parameter Settings**:
