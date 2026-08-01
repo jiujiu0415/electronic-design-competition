@@ -27,8 +27,8 @@ extern "C" {
  * @param  vd_mV  检波器输出电压 (mV), 范围 [533, 722]
  * @return AGC 线性增益 G, 范围 [11.4, 63.1]
  *
- * 二次拟合: G = 570.756 - 1.45474*Vd + 0.00094137*Vd²
- * R² = 0.99971, MAE = 0.244 (42点实测, 2026-08-01更新)
+ * 二次拟合: G_eff = 578.799 - 1.47807*Vd + 0.00095826*Vd² (含偏置电路)
+ * R² = 0.99976, MAE = 0.222 (42点实测, 2026-08-01更新)
  */
 float ScopeAGC_ComputeGain(float vd_mV);
 
@@ -40,7 +40,8 @@ float ScopeAGC_ComputeGain(float vd_mV);
  * @return H_chain 修正系数, 范围 [0.979, 1.058]
  *
  * 自然三次样条插值, 7节点, 归一化频率 (2026-08-01更新)
- * 用途: V_original = V_measured / ScopeAGC_ComputeGain(Vd) / H_chain(f)
+ * 用途: V_orig = V_adc_peak / ScopeAGC_ComputeGain(Vd) / H_chain(f)
+ *       G_eff 已含偏置电路, V_adc_peak 直接除以 G_eff 即得 AGC 输入端幅值
  */
 float ScopeCalib_GetHchain(float freq_hz);
 
