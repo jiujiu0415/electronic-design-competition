@@ -416,7 +416,8 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
         for (uint8_t order = 2; order <= (SCOPE_MAX_HARM + 1); order++)
         {
-        float target_freq = (float)order * r.f1_hz;
+        /* 谐波搜索中心用 raw 频率 (避免吸附偏移累积到高次谐波超出搜索窗口) */
+        float target_freq = (float)order * r.f1_raw_hz;
 
         /* 超过 Nyquist 的 90% 停止搜索 */
         if (target_freq > fs_hz * 0.45f) break;
