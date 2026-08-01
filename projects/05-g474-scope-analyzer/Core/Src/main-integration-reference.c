@@ -36,6 +36,7 @@
 #include "scope_calib.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
  * ═══════════════════════════════════════════════════════════ */
 
@@ -58,50 +59,99 @@ static void uart_send(const char *s)
     HAL_UART_Transmit(&huart2, (uint8_t *)s, strlen(s), 1000);
 }
 
+/* 多采集平均 — 降低 Vd 噪声 + FFT 幅度波动, √N 改善 */
+#define N_MEASURE_AVG  4  /* 设为1=单次测量, 4=4次平均 */
+
 /**
- * do_measurement — 单次完整测量
+ * do_measurement — 完整测量 (支持多次平均)
  *
- * 流程:
+ * 流程 (每次采集):
  *  ① 启动 ADC1 DMA (4096点 @2MSPS = 2.048ms)
  *  ② 等待 DMA 完成
- *  ③ 读 ADC3 → Vd (检波器直流)
- *  ④ FFT 分析 (内部调用 ScopeAGC_ComputeGain(Vd, f) 完成校准)
- *  ⑤ 串口输出 (mV 原始域)
+ *  ③ 读 ADC3 → Vd (检波器直流, 16x过采样)
+ *  ④ FFT 分析 (内部完成 G_total(Vd, f) + φ_LPF 校准)
+ *
+ * N次采集后取平均, 输出均值 + 标准差
  */
 static void do_measurement(void)
 {
-    /* ── ① 启动采集 ── */
-    ScopeADC_Restart();
+    float sum_fund = 0.0f, sum_vpp = 0.0f;
+    float sum_fund_sq = 0.0f;  /* 用于计算标准差 */
+    float vd_sum = 0.0f;
+    int   valid = 0;
+    ScopeResult last_r;
+    float last_vd_mV = 0.0f;
 
-    /* ── ② 等待 DMA 完成 (超时 ≈100ms) ── */
-    uint32_t to = 100000;
-    while (!ScopeADC_Ready() && --to) { __NOP(); }
-    if (!to) {
-        uart_send("[ERR] ADC timeout!\r\n");
+    for (int navg = 0; navg < N_MEASURE_AVG; navg++)
+    {
+        /* ── ① 启动采集 ── */
+        ScopeADC_Restart();
+
+        /* ── ② 等待 DMA 完成 (超时 ≈100ms) ── */
+        uint32_t to = 100000;
+        while (!ScopeADC_Ready() && --to) { __NOP(); }
+        if (!to) {
+            uart_send("[ERR] ADC timeout!\r\n");
+            continue;
+        }
+
+        /* ── ③ 读检波器 → Vd (已 16x 过采样) ── */
+        uint16_t vd_raw = ScopeADC_ReadEnvelope();
+        float vd_mV = (float)vd_raw * 3300.0f / 4096.0f;
+
+        /* ── ④ FFT 分析 ── */
+        uint16_t *signal = ScopeADC_GetSignalBuffer();
+        ScopeResult r = ScopeFFT_Analyze(signal, SCOPE_FFT_SIZE,
+                                          ScopeADC_GetSampleRate(), vd_mV);
+
+        /* 仅 HIGH 置信度纳入统计 */
+        if (r.confidence == 0 && r.fund_vpeak_mV > 0.1f)
+        {
+            sum_fund    += r.fund_vpeak_mV;
+            sum_fund_sq += r.fund_vpeak_mV * r.fund_vpeak_mV;
+            sum_vpp     += r.vpp_mV;
+            vd_sum      += vd_mV;
+            valid++;
+        }
+
+        last_r    = r;
+        last_vd_mV = vd_mV;
+    }
+
+    if (valid == 0) {
+        uart_send("[ERR] All measurements invalid!\r\n");
         return;
     }
 
-    /* ── ③ 读检波器 → Vd ── */
-    uint16_t vd_raw = ScopeADC_ReadEnvelope();
-    float vd_mV = (float)vd_raw * 3300.0f / 4096.0f;
-
-    /* ── ④ FFT 分析 (内部完成 G_total(Vd, f) + φ_LPF 校准) ── */
-    uint16_t *signal = ScopeADC_GetSignalBuffer();
-    ScopeResult r = ScopeFFT_Analyze(signal, SCOPE_FFT_SIZE,
-                                      ScopeADC_GetSampleRate(), vd_mV);
-
     /* ── ⑤ 串口输出 ── */
+    float fund_mean = sum_fund / (float)valid;
+    float fund_std  = 0.0f;
+    if (valid > 1) {
+        float var = (sum_fund_sq - sum_fund*sum_fund/(float)valid) / (float)(valid-1);
+        if (var > 0.0f) fund_std = sqrtf(var);
+    }
+    float vd_mean   = vd_sum / (float)valid;
+    float vpp_mean  = sum_vpp / (float)valid;
+
     snprintf(uart_buf, sizeof(uart_buf),
-             "\r\n[AGC] Vd=%.1fmV  G_f1=%.2f\r\n", vd_mV, r.agc_gain);
+             "\r\n[AGC] Vd=%.1fmV (avg %d)  G_f1=%.2f\r\n",
+             vd_mean, valid, last_r.agc_gain);
     uart_send(uart_buf);
 
-    ScopeFFT_Print(&r);
+    /* 打印最后一次的完整信息 (频率/谐波/相位) */
+    ScopeFFT_Print(&last_r);
+
+    /* 打印平均幅度 + 标准差 */
+    snprintf(uart_buf, sizeof(uart_buf),
+             "  Avg(%d): Fund=%.1f mVpk (std=%.1f)  Vpp=%.1f mV\r\n",
+             valid, fund_mean, fund_std, vpp_mean);
+    uart_send(uart_buf);
 
     /* ── 验证: 修正后基波相位应≈0 (信号源相位=0) ── */
     snprintf(uart_buf, sizeof(uart_buf),
              "  Phase check: |phi_fund|=%.3f rad (%.1f deg) [expect ~0]\r\n",
-             fabsf(r.fund_phase_rad),
-             fabsf(r.fund_phase_rad) * 180.0f / 3.14159265f);
+             fabsf(last_r.fund_phase_rad),
+             fabsf(last_r.fund_phase_rad) * 180.0f / 3.14159265f);
     uart_send(uart_buf);
 }
 

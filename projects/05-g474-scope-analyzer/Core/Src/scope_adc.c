@@ -58,11 +58,19 @@ uint16_t* ScopeADC_GetSignalBuffer(void)
     return adc1_signal_buf;
 }
 
+#define SCOPE_VD_OVERSAMPLE  16  /* Vd 过采样次数 — 降噪 √16=4x */
+
 uint16_t ScopeADC_ReadEnvelope(void)
 {
-    HAL_ADC_Start(&hadc2);
-    HAL_ADC_PollForConversion(&hadc2, 10);
-    return (uint16_t)HAL_ADC_GetValue(&hadc2);
+    uint32_t sum = 0;
+    for (int i = 0; i < SCOPE_VD_OVERSAMPLE; i++)
+    {
+        HAL_ADC_Start(&hadc2);
+        HAL_ADC_PollForConversion(&hadc2, 10);
+        sum += HAL_ADC_GetValue(&hadc2);
+        HAL_ADC_Stop(&hadc2);
+    }
+    return (uint16_t)(sum / SCOPE_VD_OVERSAMPLE);
 }
 
 void ScopeADC_Restart(void)
