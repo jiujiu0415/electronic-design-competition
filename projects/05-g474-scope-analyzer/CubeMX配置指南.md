@@ -11,7 +11,8 @@
 PA0 → ADC1_IN1: 信号波形, TIM2 TRGO @2.0MSPS, DMA Circular, 4096点
 PA1 → ADC2_IN2: 检波器直流, 软件触发单次转换 (无 DMA)
 PA4 → GPIO: 模拟开关控制 u_J
-PA2 → USART2_TX: 串口打印
+PA2 → USART2_TX: 串口屏通信 (TJC USART HMI, 115200bps)
+PA3 → USART2_RX: 串口屏触摸事件接收
 ```
 
 | 参数 | 值 |
@@ -206,7 +207,9 @@ Pinout & Configuration → System Core → **GPIO**:
 
 ---
 
-## ═══ 第8步：USART2 — 串口打印 ═══
+## ═══ 第8步：USART2 — 串口屏通信 ═══
+
+> ⚠️ USART2 已从调试串口改为 **TJC 串口屏**（淘晶驰 7" USART HMI），不再用于 printf 调试。
 
 Pinout & Configuration → Connectivity → **USART2**:
 
@@ -218,16 +221,25 @@ Pinout & Configuration → Connectivity → **USART2**:
 | Parity | None |
 | Stop Bits | 1 |
 
-| 引脚 | 信号 |
-|------|------|
-| PA2 | USART2_TX |
-| PA3 | USART2_RX（可选） |
+| 引脚 | 信号 | 连接 |
+|------|------|------|
+| PA2 | USART2_TX | → 串口屏 **RX** |
+| PA3 | USART2_RX | ← 串口屏 **TX**（触摸事件，必须接） |
 
 ---
 
-## ═══ 第9步：NVIC ═══
+## ═══ 第9步：NVIC — 中断 ═══
 
-保持默认。DMA1 Channel1 中断自动勾选（灰色），无需手动调整。
+> ⚠️ USART2 必须开 RX 中断接收屏幕触摸事件，否则按键无效。
+
+System Core → **NVIC**:
+
+| 中断 | 状态 | 说明 |
+|------|------|------|
+| DMA1 Channel1 | ✅ 自动勾选 | ADC1 DMA 传输完成中断 |
+| **USART2 global interrupt** | **✅ 手动勾选** | 接收屏幕触摸事件（printh 帧） |
+
+其他保持默认。
 
 ---
 
@@ -282,23 +294,23 @@ Pinout & Configuration → **Software Packs** → **Select Components**:
 
 ```c
 // 1. 初始化
-ScopeADC_Init();    // 校准 ADC1+ADC2, 启动 TIM2, DMA, 开关默认断开
 ScopeFFT_Init();
+ScopeADC_Init();        // 校准 ADC1+ADC2, 启动 TIM2, DMA, 开关默认断开
+ScopeDisplay_Init();    // 串口屏: 等待500ms → page 0 → 启动RX中断
 
-// 2. 启动一轮采集
-ScopeADC_Restart();
+// 2. 主循环 (详见 main-integration-reference.c §④)
+while (1) {
+    ScopeDisplay_ProcessTouch();   // 处理屏幕按键
 
-// 3. 等待 DMA 完成 (4096点 @2MSPS = 2.05ms)
-while (!ScopeADC_Ready());
+    ScopeADC_SwitchOpen();         // 断开干扰
+    HAL_Delay(10);
+    do_measurement();              // 4次采集→平均→更新屏幕
 
-// 4. 读检波器 + 信号
-uint16_t vd_raw = ScopeADC_ReadEnvelope();          // ADC2 软件触发
-uint16_t *signal = ScopeADC_GetSignalBuffer();       // ADC1 DMA 缓冲
-
-// 5. 分析
-float vd_mV = vd_raw * 3300.0f / 4096.0f;
-float G = ScopeAGC_ComputeGain(vd_mV);
-ScopeResult r = ScopeFFT_AnalyzeSimple(signal, 4096, 2.0e6, G);
+    for (int t = 0; t < 200; t++) {  // 2秒等待, 持续响应触摸
+        HAL_Delay(10);
+        ScopeDisplay_ProcessTouch();
+    }
+}
 ```
 
 ---
@@ -309,7 +321,8 @@ ScopeResult r = ScopeFFT_AnalyzeSimple(signal, 4096, 2.0e6, G);
 |-----|--------|----------|
 | PA0 | ADC1_IN1 | 信号输入（经 AGC + 偏置，0~3.2V） |
 | PA1 | ADC2_IN2 | 检波器直流（跟随器后） |
-| PA2 | USART2_TX | 串口打印 |
+| PA2 | USART2_TX | 串口屏通信 (TJC HMI, 115200bps) |
+| PA3 | USART2_RX | 串口屏触摸事件 |
 | PA4 | GPIO_Output | 模拟开关 (LOW=断开, HIGH=闭合) |
 | PA13 | SYS_SWDIO | ST-LINK 调试 |
 | PA14 | SYS_SWCLK | ST-LINK 调试 |
