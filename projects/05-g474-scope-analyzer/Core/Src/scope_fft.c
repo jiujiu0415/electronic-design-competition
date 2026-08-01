@@ -58,11 +58,14 @@ static void parabola_interp(const float *mag, uint16_t k,
     float b = mag[k];
     float c = mag[k + 1];
 
-    /* 偏移量 d (bin 为单位) */
+    /* 偏移量 d (bin 为单位)
+     * 标准公式: d = 0.5*(c-a)/(2b-a-c)
+     * 推导: 三点抛物线 f(k+p) ≈ b + p*(c-a)/2 + p²*(a-2b+c)/2
+     *       令 f'(p)=0 → p = 0.5*(c-a)/(2b-a-c) */
     float denom = 2.0f * b - a - c;
     float d = 0.0f;
     if (ABS_F(denom) > 1e-9f)
-        d = 0.5f * (a - c) / denom;
+        d = 0.5f * (c - a) / denom;
 
     /* 钳位 */
     if (d >  0.5f) d =  0.5f;
@@ -296,6 +299,18 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
 
     /* 只保留前32个最强的峰 */
     if (peak_count > 32) peak_count = 32;
+
+    /* DEBUG: 打印前5个最强峰 (排查高频检测失败) */
+    {
+        char dbg[128];
+        int n_show = peak_count < 5 ? peak_count : 5;
+        for (int pi = 0; pi < n_show; pi++) {
+            float pf = (float)peak_bins[pi] * fs_hz / (float)SCOPE_FFT_SIZE;
+            snprintf(dbg, sizeof(dbg), "[DBG] Peak#%d: bin=%d f=%.0fHz mag=%.1f\r\n",
+                     pi+1, peak_bins[pi], pf, peak_mags[pi]);
+            HAL_UART_Transmit(&huart2, (uint8_t *)dbg, strlen(dbg), 1000);
+        }
+    }
 
     if (peak_count == 0)
     {

@@ -97,7 +97,7 @@ static void do_measurement(void)
 
         /* ── ③ 读检波器 → Vd (已 16x 过采样) ── */
         uint16_t vd_raw = ScopeADC_ReadEnvelope();
-        float vd_mV = (float)vd_raw * 3290.0f / 4096.0f;  /* Vref=3.29V 实测 */
+        float vd_mV = (float)vd_raw * 3300.0f / 4096.0f;
 
         /* ── ④ FFT 分析 ── */
         uint16_t *signal = ScopeADC_GetSignalBuffer();
@@ -119,7 +119,13 @@ static void do_measurement(void)
     }
 
     if (valid == 0) {
-        uart_send("[ERR] All measurements invalid!\r\n");
+        /* 诊断: 打印最后一次结果帮助排查 */
+        char diag[128];
+        snprintf(diag, sizeof(diag),
+                 "[ERR] invalid! conf=%d fund=%.1f Vd=%.1f f1=%.0f raw=%.0f\r\n",
+                 last_r.confidence, last_r.fund_vpeak_mV,
+                 last_vd_mV, last_r.f1_hz, last_r.f1_raw_hz);
+        uart_send(diag);
         return;
     }
 
