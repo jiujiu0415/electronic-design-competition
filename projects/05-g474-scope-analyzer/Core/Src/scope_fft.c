@@ -501,7 +501,12 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     {
         float adc_amp   = r.harmonics[i].vpeak_mV;   /* 暂存的 ADC 幅度 */
         float raw_phase = r.harmonics[i].phase_rad;  /* 暂存的原始相位 */
-        float freq      = (float)(i + 2) * r.f1_hz; /* 精确谐波频率 = order × f₁ */
+
+        /* 根据暂存的插值频率推算实际谐波次数 (不假设 H2=harmonics[0], H3=[1]...)
+         * 例: 方波不含 H2, 搜索到 H3 时 harmonics[0].freq_hz≈3×f₁_raw → order=3 */
+        int order = (int)(r.harmonics[i].freq_hz / r.f1_hz + 0.5f);
+        if (order < 2) order = 2;
+        float freq = (float)order * r.f1_hz;
 
         r.harmonics[i].vpeak_mV  = calibrate_vpeak_mV(adc_amp, freq, r.vd_mV);
         r.harmonics[i].phase_rad = calibrate_phase_rad(raw_phase, freq);
@@ -569,6 +574,19 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
         r.confidence = 2;  /* LOW — 噪声/干扰严重 */
 
     return r;
+}
+
+/* ============================================================
+ * ScopeFFT_GetMagBuffer / ScopeFFT_GetMagSize — 暴露幅度谱
+ * ============================================================ */
+const float* ScopeFFT_GetMagBuffer(void)
+{
+    return fft_mag;
+}
+
+uint16_t ScopeFFT_GetMagSize(void)
+{
+    return SCOPE_FFT_SIZE / 2 + 1;  /* 2049 */
 }
 
 /* ============================================================

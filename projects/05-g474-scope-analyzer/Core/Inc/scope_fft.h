@@ -33,7 +33,7 @@
 #define SCOPE_HARM_SEARCH_BINS  2
 
 /* ADC 参考 */
-#define SCOPE_ADC_VREF          3.30f   /* 参考电压 */
+#define SCOPE_ADC_VREF          3.30f   /* 参考电压 (硬件实测=3.30V; M8校准以3.29V拟合, 偏差<0.3%可忽略) */
 #define SCOPE_ADC_MAX           4096.0f
 
 /* ============================================================
@@ -113,5 +113,21 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
  * ScopeFFT_Print — 串口打印结果 (huart2)
  */
 void ScopeFFT_Print(const ScopeResult *r);
+
+/**
+ * ScopeFFT_GetMagBuffer — 获取 FFT 幅度谱 (只读)
+ *
+ * 返回 fft_mag[0..SCOPE_FFT_SIZE/2], 共 2049 个 bin。
+ * 数据在每次 ScopeFFT_Analyze() 调用后刷新。
+ * 用于串口屏频谱显示的下采样数据源。
+ */
+const float* ScopeFFT_GetMagBuffer(void);
+
+/**
+ * ScopeFFT_GetMagSize — 获取幅度谱长度
+ *
+ * @return SCOPE_FFT_SIZE/2 + 1 = 2049
+ */
+uint16_t ScopeFFT_GetMagSize(void);
 
 #endif /* __SCOPE_FFT_H */
