@@ -174,6 +174,16 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     if (len != SCOPE_FFT_SIZE || signal_buf == NULL)
         return r;
 
+    /* DEBUG: 打印前16个原始ADC采样值 (排查高频采样问题) */
+    {
+        char dbg[256]; int pos = 0;
+        pos += snprintf(dbg+pos, sizeof(dbg)-pos, "[DBG] RAW:");
+        for (int si = 0; si < 16; si++)
+            pos += snprintf(dbg+pos, sizeof(dbg)-pos, " %u", signal_buf[si]);
+        pos += snprintf(dbg+pos, sizeof(dbg)-pos, "\r\n");
+        HAL_UART_Transmit(&huart2, (uint8_t *)dbg, strlen(dbg), 1000);
+    }
+
     r.bin_resolution = fs_hz / (float)SCOPE_FFT_SIZE;
     r.vd_mV          = vd_mV;
     r.agc_gain       = 0.0f;  /* 占位, 等 f1_hz 确定后再计算 */
