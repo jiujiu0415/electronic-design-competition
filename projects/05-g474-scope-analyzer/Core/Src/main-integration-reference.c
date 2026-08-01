@@ -21,8 +21,7 @@
  *   ② φ_LPF(f)        — LPF 相位修正
  *
  * ============================================================
- * 显示: TJC 串口屏 (USART2, 115200 bps)
- *   编译开关: SCOPE_USE_DISPLAY (1=串口屏, 0=调试打印)
+ * 显示: TJC 串口屏 (USART2, 115200 bps, 仅显示模式, 无调试串口)
  *
  * 需要的源文件:
  *   scope_adc.c,  scope_fft.c,  scope_calib.c,  scope_display.c
@@ -60,7 +59,6 @@
 static void do_measurement(void)
 {
     float sum_fund = 0.0f, sum_vpp = 0.0f, sum_vrms = 0.0f;
-    float sum_fund_sq = 0.0f;  /* 用于计算标准差 */
     float vd_sum = 0.0f;
     int   valid = 0;
     ScopeResult last_valid_r;
@@ -92,7 +90,6 @@ static void do_measurement(void)
         if (r.confidence == 0 && r.fund_vpeak_mV > 0.1f)
         {
             sum_fund    += r.fund_vpeak_mV;
-            sum_fund_sq += r.fund_vpeak_mV * r.fund_vpeak_mV;
             sum_vpp     += r.vpp_mV;
             sum_vrms    += r.vrms_mV;
             vd_sum      += vd_mV;
@@ -105,16 +102,7 @@ static void do_measurement(void)
         }
     }
 
-    if (!has_valid) {
-        /* 诊断: 打印最后一次结果帮助排查 */
-        char diag[128];
-        snprintf(diag, sizeof(diag),
-                 "[ERR] invalid! conf=%d fund=%.1f Vd=%.1f f1=%.0f raw=%.0f\r\n",
-                 last_valid_r.confidence, last_valid_r.fund_vpeak_mV,
-                 last_valid_r.vd_mV, last_valid_r.f1_hz, last_valid_r.f1_raw_hz);
-        HAL_UART_Transmit(&huart2, (uint8_t *)diag, strlen(diag), 1000);
-        return;
-    }
+    if (!has_valid) return;  /* 无有效测量, 保持屏幕上次内容 */
 
     /* ── ⑤ 用平均值更新显示值 (减噪 √N) ── */
     {
@@ -127,24 +115,7 @@ static void do_measurement(void)
     }
 
     /* ── ⑥ 更新串口屏 ── */
-#if SCOPE_USE_DISPLAY
     ScopeDisplay_Update(&last_valid_r, signal_copy);
-#else
-    /* 调试模式: 串口打印 */
-    static char uart_buf[256];
-    float fund_mean = sum_fund / (float)valid;
-    float fund_std  = 0.0f;
-    if (valid > 1) {
-        float var = (sum_fund_sq - sum_fund*sum_fund/(float)valid) / (float)(valid-1);
-        if (var > 0.0f) fund_std = sqrtf(var);
-    }
-    snprintf(uart_buf, sizeof(uart_buf),
-             "\r\n[AGC] Vd=%.1fmV (avg %d)  G_f1=%.2f  Fund=%.1f±%.1fmV\r\n",
-             vd_sum / (float)valid, valid, last_valid_r.agc_gain,
-             fund_mean, fund_std);
-    HAL_UART_Transmit(&huart2, (uint8_t *)uart_buf, strlen(uart_buf), 1000);
-    ScopeFFT_Print(&last_valid_r);
-#endif
 }
 
  * ═══════════════════════════════════════════════════════════ */
@@ -156,17 +127,7 @@ static void do_measurement(void)
 
   ScopeFFT_Init();
   ScopeADC_Init();
-
-#if SCOPE_USE_DISPLAY
   ScopeDisplay_Init();
-#else
-  HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n========================================\r\n", 44, 1000);
-  HAL_UART_Transmit(&huart2, (uint8_t *)" Scope Analyzer — STM32G474\r\n", 31, 1000);
-  HAL_UART_Transmit(&huart2, (uint8_t *)" ADC1 2MSPS + 4096 FFT\r\n", 26, 1000);
-  HAL_UART_Transmit(&huart2, (uint8_t *)" Calib: G_total(Vd,f) + phi_LPF\r\n", 35, 1000);
-  HAL_UART_Transmit(&huart2, (uint8_t *)"========================================\r\n", 44, 1000);
-  HAL_UART_Transmit(&huart2, (uint8_t *)"Ready.\r\n", 7, 1000);
-#endif
 
  * ═══════════════════════════════════════════════════════════ */
 
@@ -178,9 +139,7 @@ static void do_measurement(void)
   while (1)
   {
       /* ── 触摸事件处理 (屏幕按键) ── */
-#if SCOPE_USE_DISPLAY
       ScopeDisplay_ProcessTouch();
-#endif
 
       /* ── 要求1/2: 无干扰, 模拟开关断开 ── */
       ScopeADC_SwitchOpen();
@@ -191,9 +150,7 @@ static void do_measurement(void)
       for (uint16_t tick = 0; tick < 200; tick++)
       {
           HAL_Delay(10);  /* 10ms × 200 = 2s */
-#if SCOPE_USE_DISPLAY
           ScopeDisplay_ProcessTouch();
-#endif
       }
 
       /* ── 要求3: 有干扰, 模拟开关闭合 ── */
