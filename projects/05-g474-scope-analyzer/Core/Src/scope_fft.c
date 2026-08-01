@@ -319,6 +319,16 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
      * ═══════════════════════════════════════════════ */
 
     /* Step 1: 谐波序列匹配 — 每个峰作为候选基频, 统计其谐波匹配数 */
+
+    /* 先找出有效频率范围内最强峰的幅值 (用于过滤弱噪声峰) */
+    float strongest_mag = 0.0f;
+    for (uint16_t i = 0; i < peak_count; i++)
+    {
+        float fc = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
+        if (fc >= 5000.0f && fc <= 500000.0f && peak_mags[i] > strongest_mag)
+            strongest_mag = peak_mags[i];
+    }
+
     int   best_fund_idx = -1;
     int   best_match    = -1;  /* -1 = 尚未找到有效候选 */
     float best_mag      = 0.0f;
@@ -328,6 +338,11 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
         float fc = (float)peak_bins[i] * fs_hz / (float)SCOPE_FFT_SIZE;
 
         if (fc < 5000.0f || fc > 500000.0f) continue;
+
+        /* 过滤弱峰: 幅值 <20% 最强峰的候选不能参与谐波匹配。
+         * 这防止纯正弦波场景下, 噪声峰(低幅值, 随机"谐波匹配")
+         * 战胜真正的基波峰(高幅值, 但无谐波) — 2026-08-01实测修复 */
+        if (peak_mags[i] < strongest_mag * 0.20f) continue;
 
         /* 统计 order 2~8 有多少个整数倍位置有其他峰对齐 */
         int matches = 0;
