@@ -2,7 +2,7 @@
  * @file    scope_calib.h
  * @brief   信号链路校准 — AGC总增益(含频率修正) + 滤波器频响(已旁路) + LPF相位
  * @author  jiujiu0415
- * @date    2026-08-01
+ * @date    2026-08-01 (v2: 新数据121点 + Vref修正3.29V)
  *
  * 信号链路 (要求1/2, 滤波器已移除):
  *   信号发生器 → 加法器 → AD603 AGC → 直流偏置 → ADC
@@ -31,17 +31,17 @@ extern "C" {
 
 /**
  * @brief  从检波器直流电压 + 信号频率计算 AGC 总增益
- * @param  vd_mV    检波器输出电压 (mV), 范围 [522, 718]
+ * @param  vd_mV    检波器输出电压 (mV), 范围 [549, 743]
  * @param  freq_hz  信号频率 (Hz), 范围 [10k, 500k], 超范围钳位
  * @return AGC 线性增益 G_total (含加法器+AGC+偏置电路, 从信号源到ADC输入)
  *
- * 拟合模型 (M3, 2026-08-01 新测, 滤波器已移除):
- *   G_total = a0 + a1·Vd + a2·Vd² + a3·fn + a4·fn·Vd
+ * 拟合模型 (M8, 2026-08-01 v2 重测, 121点, Vref=3.29V):
+ *   G_total = a0 + a1·Vd + a2·Vd² + a3·fn + a4·fn·Vd + a5·fn² + a6·fn²·Vd
  *   fn = (freq_hz − 10000) / 490000  ∈ [0, 1]
  *
- * 77点实测 (11输入电平 × 7频率, 10k-500kHz):
- *   R² = 0.9984, MAE = 0.43 (G单位), MaxE = 2.11
- *   V_original 还原: MAE=1.82%, MaxE=4.60%
+ * 121点实测 (11输入电平 × 11频率, 10k-500kHz):
+ *   R² = 0.99941, MAE(G) = 1.14%, MaxE(G) = 5.21%
+ *   V_original 还原: MAE = 1.15%, MaxE = 5.21%
  *
  * Vd 由 ADC3 独立采集 (PA1), 与 ADC1 同步触发
  */
