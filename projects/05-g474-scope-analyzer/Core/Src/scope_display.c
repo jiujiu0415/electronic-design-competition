@@ -12,6 +12,7 @@
 
 #include "scope_display.h"
 #include "scope_adc.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
