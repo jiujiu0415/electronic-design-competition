@@ -110,7 +110,16 @@ static void do_measurement(void)
         }
     }
 
-    if (!has_valid) return;
+    if (!has_valid) {
+        /* 诊断: 打印最后一次结果帮助排查 */
+        char diag[128];
+        snprintf(diag, sizeof(diag),
+                 "[ERR] invalid! conf=%d fund=%.1f Vd=%.1f f1=%.0f raw=%.0f\r\n",
+                 last_valid_r.confidence, last_valid_r.fund_vpeak_mV,
+                 last_valid_r.vd_mV, last_valid_r.f1_hz, last_valid_r.f1_raw_hz);
+        HAL_UART_Transmit(&huart2, (uint8_t *)diag, strlen(diag), 1000);
+        return;
+    }
 
     /* ── ⑤ 用平均值更新显示值 (减噪 √N) ── */
     {
