@@ -8,7 +8,7 @@
  *          → 谐波搜索(f₁整数倍±2bin)
  *          → 抛物线插值(freq+amplitude)
  *          → 相位提取(atan2)
- *          → 校准链: ÷G → ÷H_chain(f) → −φ_LPF(f)
+ *          → 校准链: ÷G_total(Vd, f) → −φ_LPF(f)  (滤波器已移除)
  *          → mV输出
  */
 
@@ -115,19 +115,18 @@ static inline float adc_code_to_V(float code)
  *   V_orig(V)   = V_preAGC / H_chain(f) (加法器+LPF幅频补偿)
  *   → ×1000 → mV
  * ============================================================ */
-static float calibrate_vpeak_mV(float vpeak_adc_code, float freq_hz, float agc_gain)
+static float calibrate_vpeak_mV(float vpeak_adc_code, float freq_hz, float vd_mV)
 {
-    float H = ScopeCalib_GetHchain(freq_hz);
-    if (H < 0.5f) H = 0.5f;
+    float G = ScopeAGC_ComputeGain(vd_mV, freq_hz);
+    if (G < 1.0f) G = 1.0f;
 
     float V_adc = adc_code_to_V(vpeak_adc_code);
-    float V_preAGC = V_adc / agc_gain;
-    float V_orig   = V_preAGC / H;
+    float V_orig = V_adc / G;
     return V_orig * 1000.0f;
 }
 
 /* ============================================================
- * 三校准: 相位 — FFT实测相位 → 原始输入域相位
+ * 校准: 相位 — FFT实测相位 → 原始输入域相位
  *
  *   φ_orig = φ_measured − φ_LPF(f)
  *
@@ -163,7 +162,7 @@ void ScopeFFT_Init(void)
 ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
                               uint16_t len,
                               float fs_hz,
-                              float agc_gain)
+                              float vd_mV)
 {
     ScopeResult r;
     memset(&r, 0, sizeof(r));
@@ -173,7 +172,8 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
         return r;
 
     r.bin_resolution = fs_hz / (float)SCOPE_FFT_SIZE;
-    r.agc_gain       = (agc_gain > 1.0f) ? agc_gain : 1.0f;
+    r.vd_mV          = vd_mV;
+    r.agc_gain       = 0.0f;  /* 占位, 等 f1_hz 确定后再计算 */
 
     /* ═══════════════════════════════════════════════
      * 阶段 1: 时域参数 — Vdc, Vpp, Vrms (ADC域)
@@ -393,6 +393,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
     if (N < 20)  N = 20;
     if (N > 1000) N = 1000;
     r.f1_hz = (float)N * SCOPE_FREQ_STEP;
+    r.agc_gain = ScopeAGC_ComputeGain(r.vd_mV, r.f1_hz);  /* 基频处增益 (调试用) */
 
     /* ═══════════════════════════════════════════════
      * 阶段 5: 基波相位提取 (在原始 bin 处)
@@ -477,7 +478,7 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
      * ================================================================ */
 
     /* ── 应用到基波 ── */
-    r.fund_vpeak_mV  = calibrate_vpeak_mV(fund_amp_raw, r.f1_hz, r.agc_gain);
+    r.fund_vpeak_mV  = calibrate_vpeak_mV(fund_amp_raw, r.f1_hz, r.vd_mV);
     r.fund_phase_rad = calibrate_phase_rad(fund_phase_raw, r.f1_hz);
 
     /* ── 应用到各谐波 ── */
@@ -487,18 +488,16 @@ ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
         float raw_phase = r.harmonics[i].phase_rad;  /* 暂存的原始相位 */
         float freq      = (float)(i + 2) * r.f1_hz; /* 精确谐波频率 = order × f₁ */
 
-        r.harmonics[i].vpeak_mV  = calibrate_vpeak_mV(adc_amp, freq, r.agc_gain);
+        r.harmonics[i].vpeak_mV  = calibrate_vpeak_mV(adc_amp, freq, r.vd_mV);
         r.harmonics[i].phase_rad = calibrate_phase_rad(raw_phase, freq);
         r.harmonics[i].freq_hz   = freq;  /* 谐波频率吸附到精确整数倍 */
     }
 
-    /* ── 时域 Vpp/Vrms 也做 AGC + H_chain 修正 ── */
+    /* ── 时域 Vpp/Vrms 也做 AGC 修正 ── */
     {
-        float H1 = ScopeCalib_GetHchain(r.f1_hz);
-        if (H1 < 0.5f) H1 = 0.5f;
-
-        float vpp_V   = adc_code_to_V(vpp_adc) / r.agc_gain / H1;
-        float vrms_V  = adc_code_to_V(vrms_adc) / r.agc_gain / H1;
+        float G_td = r.agc_gain;  /* 用基频处的增益 (近似, 多谐波信号不完全准确) */
+        float vpp_V   = adc_code_to_V(vpp_adc) / G_td;
+        float vrms_V  = adc_code_to_V(vrms_adc) / G_td;
         r.vpp_mV  = vpp_V * 1000.0f;
         r.vrms_mV = vrms_V * 1000.0f;
     }
@@ -576,8 +575,8 @@ void ScopeFFT_Print(const ScopeResult *r)
 
     /* ── 时域 ── */
     snprintf(buf, sizeof(buf),
-             "Vdc=%.0fmV  Vpp=%.1fmV  Vrms=%.1fmV  AGC_G=%.2f\r\n",
-             r->vdc_mV, r->vpp_mV, r->vrms_mV, r->agc_gain);
+             "Vdc=%.0fmV  Vpp=%.1fmV  Vrms=%.1fmV  Vd=%.1fmV  G=%.2f\r\n",
+             r->vdc_mV, r->vpp_mV, r->vrms_mV, r->vd_mV, r->agc_gain);
     HAL_UART_Transmit(&huart2, (uint8_t *)buf, strlen(buf), 1000);
 
     /* ── 基波 ── */

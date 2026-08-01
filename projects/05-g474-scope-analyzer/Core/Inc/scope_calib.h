@@ -1,13 +1,20 @@
 /**
  * @file    scope_calib.h
- * @brief   信号链路校准 — AGC增益 + 加法器/滤波器频响 + LPF相位
+ * @brief   信号链路校准 — AGC总增益(含频率修正) + 滤波器频响(已旁路) + LPF相位
  * @author  jiujiu0415
  * @date    2026-08-01
  *
- * 包含三组校准:
- *   1. ScopeAGC_ComputeGain()   — 检波器直流 → AGC放大倍数 (二次拟合)
- *   2. ScopeCalib_GetHchain()   — 频率 → 加法器+滤波器链增益 (三次样条)
- *   3. ScopeCalib_GetLPFPhase() — 频率 → LPF相位偏移 (巴特沃斯电路模型, Sallen-Key拓扑)
+ * 信号链路 (要求1/2, 滤波器已移除):
+ *   信号发生器 → 加法器 → AD603 AGC → 直流偏置 → ADC
+ *
+ * 校准函数:
+ *   1. ScopeAGC_ComputeGain(vd_mV, freq_hz) — 检波器直流 + 频率 → AGC总增益
+ *   2. ScopeCalib_GetHchain(freq_hz)        — 滤波器频响 (已旁路, 返回1.0)
+ *   3. ScopeCalib_GetLPFPhase(freq_hz)      — LPF相位偏移 (Sallen-Key电路模型)
+ *
+ * 计算链:
+ *   V_orig = V_adc_peak / ScopeAGC_ComputeGain(Vd, f)
+ *   φ_orig = φ_measured − ScopeCalib_GetLPFPhase(f)
  */
 
 #ifndef SCOPE_CALIB_H
@@ -20,32 +27,39 @@
 extern "C" {
 #endif
 
-/* ── AGC 增益校准 ───────────────────────────────────────────── */
+/* ── AGC 总增益校准 (含频率修正) ──────────────────────────────── */
 
 /**
- * @brief  从检波器直流电压计算 AGC 放大倍数
- * @param  vd_mV  检波器输出电压 (mV), 范围 [533, 722]
- * @return AGC 线性增益 G, 范围 [11.4, 63.1]
- *
- * 二次拟合: G_eff = 578.799 - 1.47807*Vd + 0.00095826*Vd² (含偏置电路)
- * R² = 0.99976, MAE = 0.222 (42点实测, 2026-08-01更新)
- */
-float ScopeAGC_ComputeGain(float vd_mV);
-
-/* ── 加法器+滤波器 频响修正 ─────────────────────────────────── */
-
-/**
- * @brief  获取加法器+滤波器链的频率响应修正系数
+ * @brief  从检波器直流电压 + 信号频率计算 AGC 总增益
+ * @param  vd_mV    检波器输出电压 (mV), 范围 [522, 718]
  * @param  freq_hz  信号频率 (Hz), 范围 [10k, 500k], 超范围钳位
- * @return H_chain 修正系数, 范围 [0.979, 1.058]
+ * @return AGC 线性增益 G_total (含加法器+AGC+偏置电路, 从信号源到ADC输入)
  *
- * 自然三次样条插值, 7节点, 归一化频率 (2026-08-01更新)
- * 用途: V_orig = V_adc_peak / ScopeAGC_ComputeGain(Vd) / H_chain(f)
- *       G_eff 已含偏置电路, V_adc_peak 直接除以 G_eff 即得 AGC 输入端幅值
+ * 拟合模型 (M3, 2026-08-01 新测, 滤波器已移除):
+ *   G_total = a0 + a1·Vd + a2·Vd² + a3·fn + a4·fn·Vd
+ *   fn = (freq_hz − 10000) / 490000  ∈ [0, 1]
+ *
+ * 77点实测 (11输入电平 × 7频率, 10k-500kHz):
+ *   R² = 0.9984, MAE = 0.43 (G单位), MaxE = 2.11
+ *   V_original 还原: MAE=1.82%, MaxE=4.60%
+ *
+ * Vd 由 ADC3 独立采集 (PA1), 与 ADC1 同步触发
+ */
+float ScopeAGC_ComputeGain(float vd_mV, float freq_hz);
+
+/* ── 滤波器频响修正 (已旁路) ─────────────────────────────────── */
+
+/**
+ * @brief  滤波器链频响修正 — 当前已旁路 (要求1/2 无滤波器)
+ * @param  freq_hz  信号频率 (Hz)
+ * @return 恒为 1.0
+ *
+ * 注: 滤波器移除前使用三次样条插值 (7节点, 10k-500kHz, H∈[0.979,1.058])
+ *     如需恢复滤波器, 将旧实现从 git 历史 (d1713fc) 还原
  */
 float ScopeCalib_GetHchain(float freq_hz);
 
-/* ── LPF 相位校准 (新增) ────────────────────────────────────── */
+/* ── LPF 相位校准 ────────────────────────────────────────────── */
 
 /**
  * @brief  巴特沃斯二阶有源低通滤波器相位偏移 φ_LPF(f) (Sallen-Key拓扑)

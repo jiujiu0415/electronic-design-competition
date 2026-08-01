@@ -1,24 +1,23 @@
 /**
- * main.c 集成参考 — 周期信号测量分析装置 (最终方案)
+ * main.c 集成参考 — 周期信号测量分析装置 (要求1/2, 滤波器已移除)
  *
  * ============================================================
  * 电路连接:
  *   PA0 = ADC1_IN1   → 信号 (AGC+DC偏置后, 0~3.3V 单极性)
- *   PA1 = ADC2_IN2   → 检波器直流
+ *   PA1 = ADC3_IN1   → 检波器直流
  *   PA2 = USART2_TX   → 串口打印
  *   PA4 = GPIO Output → 模拟开关 (LOW=断u_J, HIGH=合u_J)
  *
  * ============================================================
- * 信号链:
- *   u_b(+u_J) → 加法器 → LPF(700kHz) → AGC(×G→3Vpp) → DC偏置 → ADC1
- *                                         │
- *                                         └→ 检波器 → ADC2
+ * 信号链 (要求1/2, 滤波器已移除):
+ *   u_b(+u_J) → 加法器 → AGC(×G→3Vpp) → DC偏置 → ADC1
+ *                              │
+ *                              └→ 检波器 → ADC3
  *
  * ============================================================
- * 三校准:
- *   ① G = f(Vd)        — 检波器直流 → AGC 增益
- *   ② H_chain(f)       — 加法器+LPF 幅频修正
- *   ③ φ_LPF(f)         — LPF 相位修正
+ * 校准 (2步, 滤波器移除后):
+ *   ① G_total(Vd, f)  — 检波器直流+频率 → AGC总增益 (含频率修正)
+ *   ② φ_LPF(f)        — LPF 相位修正
  *
  * ============================================================
  * 输出: 全部 mV 原始域 (u_b 输入端)
@@ -65,8 +64,8 @@ static void uart_send(const char *s)
  * 流程:
  *  ① 启动 ADC1 DMA (4096点 @2MSPS = 2.048ms)
  *  ② 等待 DMA 完成
- *  ③ 读 ADC2 → Vd → AGC 增益 G
- *  ④ FFT 分析 (含500Hz吸附 + 三校准)
+ *  ③ 读 ADC3 → Vd (检波器直流)
+ *  ④ FFT 分析 (内部调用 ScopeAGC_ComputeGain(Vd, f) 完成校准)
  *  ⑤ 串口输出 (mV 原始域)
  */
 static void do_measurement(void)
@@ -82,19 +81,18 @@ static void do_measurement(void)
         return;
     }
 
-    /* ── ③ 读检波器 → AGC 增益 ── */
+    /* ── ③ 读检波器 → Vd ── */
     uint16_t vd_raw = ScopeADC_ReadEnvelope();
     float vd_mV = (float)vd_raw * 3300.0f / 4096.0f;
-    float G = ScopeAGC_ComputeGain(vd_mV);
 
-    /* ── ④ FFT 分析 (内部集成三校准) ── */
+    /* ── ④ FFT 分析 (内部完成 G_total(Vd, f) + φ_LPF 校准) ── */
     uint16_t *signal = ScopeADC_GetSignalBuffer();
     ScopeResult r = ScopeFFT_Analyze(signal, SCOPE_FFT_SIZE,
-                                      ScopeADC_GetSampleRate(), G);
+                                      ScopeADC_GetSampleRate(), vd_mV);
 
     /* ── ⑤ 串口输出 ── */
     snprintf(uart_buf, sizeof(uart_buf),
-             "\r\n[AGC] Vd=%.1fmV  G=%.2f\r\n", vd_mV, G);
+             "\r\n[AGC] Vd=%.1fmV  G_f1=%.2f\r\n", vd_mV, r.agc_gain);
     uart_send(uart_buf);
 
     ScopeFFT_Print(&r);
@@ -117,7 +115,7 @@ static void do_measurement(void)
   uart_send("\r\n========================================\r\n");
   uart_send(" Scope Analyzer — STM32G474\r\n");
   uart_send(" ADC1 2MSPS + 4096 FFT\r\n");
-  uart_send(" Calib: AGC + H_chain + phi_LPF\r\n");
+  uart_send(" Calib: G_total(Vd,f) + phi_LPF  (filter bypassed)\r\n");
   uart_send("========================================\r\n");
 
   ScopeFFT_Init();

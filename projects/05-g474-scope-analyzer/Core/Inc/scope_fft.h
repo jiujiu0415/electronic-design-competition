@@ -1,11 +1,11 @@
 /**
  * scope_fft.h — FFT 频谱分析 + 三校准集成
  *
- * 输入: ADC1 4096点信号缓冲 + AGC增益 G
+ * 输入: ADC1 4096点信号缓冲 + 检波器电压 Vd
  * 输出: 原始域 mV (基频/谐波/Vpp/Vrms), 频率 →500Hz吸附, 相位 →φ_LPF修正
  *
  * FFT: 4096点, Hann窗, Fs=2.0MSPS, 分辨率 488.28Hz
- * 校准: ① ÷G(AGC) ② ÷H_chain(f) ③ −φ_LPF(f)
+ * 校准: ① ÷G_total(Vd, f) ② −φ_LPF(f)  (滤波器已移除, 要求1/2)
  *
  * 依赖: CMSIS-DSP (arm_math.h), scope_calib.h, scope_adc.h
  */
@@ -69,8 +69,9 @@ typedef struct {
     ScopeHarmonic harmonics[SCOPE_MAX_HARM];
     uint8_t harmonic_count;
 
-    /* ── AGC ── */
-    float agc_gain;         /* AGC 线性增益 G (来自 ScopeAGC_ComputeGain) */
+    /* ── AGC/校准 ── */
+    float vd_mV;            /* 检波器直流输出 (mV), ADC3采集 */
+    float agc_gain;         /* AGC 线性增益 @基频 (调试用, ScopeAGC_ComputeGain 计算) */
 
     /* ── 置信度 ── */
     uint8_t confidence;     /* 0=HIGH (无干扰/验证通过), 1=MEDIUM, 2=LOW */
@@ -94,19 +95,19 @@ void ScopeFFT_Init(void);
  *   ③ 峰值检测 → 基频 → 500Hz 吸附
  *   ④ 谐波搜索 (f₁整数倍 ±2bin)
  *   ⑤ 抛物线插值修正 (频率+幅度)
- *   ⑥ 三校准链: ÷G → ÷H_chain(f) → −φ_LPF(f)
+ *   ⑥ 校准链: ÷G_total(Vd, f) → −φ_LPF(f)
  *   ⑦ 转换为 mV 原始域
  *
  * @param signal_buf  ADC1 原始数据 uint16_t[4096]
  * @param len         数据长度 (必须 = 4096)
  * @param fs_hz       采样率 (= 2.0e6)
- * @param agc_gain    AGC 线性增益 (来自 ScopeAGC_ComputeGain)
+ * @param vd_mV       检波器直流输出 (mV), 来自 ADC3 采集
  * @return            完整测量结果 (mV 原始域)
  */
 ScopeResult ScopeFFT_Analyze(const uint16_t *signal_buf,
                               uint16_t len,
                               float fs_hz,
-                              float agc_gain);
+                              float vd_mV);
 
 /**
  * ScopeFFT_Print — 串口打印结果 (huart2)
