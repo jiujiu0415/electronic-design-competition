@@ -97,7 +97,7 @@ static void do_measurement(void)
 
         /* ── ③ 读检波器 → Vd (已 16x 过采样) ── */
         uint16_t vd_raw = ScopeADC_ReadEnvelope();
-        float vd_mV = (float)vd_raw * 3290.0f / 4096.0f;  /* Vref=3.29V 实测 */
+        float vd_mV = (float)vd_raw * 3300.0f / 4096.0f;  /* Vref=3.30V */
 
         /* ── ④ FFT 分析 ── */
         uint16_t *signal = ScopeADC_GetSignalBuffer();

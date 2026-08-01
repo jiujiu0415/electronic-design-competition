@@ -62,7 +62,7 @@ static void parabola_interp(const float *mag, uint16_t k,
     float denom = 2.0f * b - a - c;
     float d = 0.0f;
     if (ABS_F(denom) > 1e-9f)
-        d = 0.5f * (a - c) / denom;
+        d = 0.5f * (c - a) / denom;
 
     /* 钳位 */
     if (d >  0.5f) d =  0.5f;

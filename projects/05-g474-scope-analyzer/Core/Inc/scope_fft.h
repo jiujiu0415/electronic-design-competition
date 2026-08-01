@@ -33,7 +33,7 @@
 #define SCOPE_HARM_SEARCH_BINS  2
 
 /* ADC 参考 */
-#define SCOPE_ADC_VREF          3.29f   /* 实测参考电压 */
+#define SCOPE_ADC_VREF          3.30f   /* 参考电压 */
 #define SCOPE_ADC_MAX           4096.0f
 
 /* ============================================================
